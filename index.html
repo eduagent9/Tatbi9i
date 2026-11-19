@@ -44,7 +44,7 @@ function normalizeDatabase(value){
  return x;
 }
 let db;try{db=normalizeDatabase(JSON.parse(localStorage.getItem(KEY))||blank())}catch(e){db=blank()}
-function persist(){try{localStorage.setItem(KEY,JSON.stringify(db));renderAll();return true}catch(e){toast('تعذر حفظ البيانات. صدّر نسخة احتياطية وحرّر مساحة الجهاز.');return false}}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){toast('تعذر حفظ البيانات. صدّر نسخة احتياطية وحرّر مساحة الجهاز.');return false}try{renderAll()}catch(e){console.error('تم حفظ البيانات لكن تعذر تحديث الواجهة:',e);toast('تم حفظ البيانات، لكن تعذر تحديث الشاشة. أعد تحميل التطبيق.')}return true}
 function money(n){return (Number(n)||0).toLocaleString('fr-MA',{minimumFractionDigits:2,maximumFractionDigits:2})+' DH'}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function id(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
