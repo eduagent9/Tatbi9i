@@ -5,7 +5,7 @@ describe('role permission policy', () => {
   it('grants the owner all permissions', () => {
     const all: AppPermission[] = [
       'view_dashboard','manage_team','manage_vehicles','manage_products','manage_purchases',
-      'adjust_depot_stock','manage_returns','manage_customers','create_orders','prepare_orders',
+      'adjust_depot_stock','manage_returns','manage_customers','create_orders','create_depot_sales','collect_customer_debt','prepare_orders',
       'load_delivery_vehicle','deliver_assigned_orders','create_vehicle_sales',
       'collect_vehicle_sales_cash','collect_delivery_cash','handover_own_cash',
       'receive_cash_handover','reconcile_cash','view_financial_reports','manage_expenses',
