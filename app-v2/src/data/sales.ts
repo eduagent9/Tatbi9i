@@ -30,7 +30,7 @@ export class SalesRepository {
     private readonly makeId: () => string = () => crypto.randomUUID(),
   ) {}
 
-  async create(input: CreateSaleInput): Promise<CreatedSale> {
+  async create(input: CreateSaleInput, transactionMode: 'managed' | 'external' = 'managed'): Promise<CreatedSale> {
     const invoiceId = text(input.id, 'معرّف الفاتورة');
     const invoiceNumber = text(input.invoiceNumber, 'رقم الفاتورة');
     const customerId = text(input.customerId, 'الزبون');
@@ -65,7 +65,7 @@ export class SalesRepository {
     const method = input.paymentMethod ?? 'cash';
     if (!['cash','bank','other'].includes(method)) throw new Error('طريقة الأداء غير صالحة.');
 
-    await this.db.beginTransaction();
+    if (transactionMode === 'managed') await this.db.beginTransaction();
     try {
       await this.db.run(
         `INSERT INTO invoices
@@ -135,10 +135,10 @@ export class SalesRepository {
          VALUES (?,?,?,?,?,?,?)`,
         [this.makeId(),sellerUserId,'sale.created','invoice',invoiceId,JSON.stringify({invoiceNumber,subtotalMinor,discountMinor,totalMinor,collectedMinor,dueMinor:totalMinor-collectedMinor}),timestamp],
       );
-      await this.db.commitTransaction();
+      if (transactionMode === 'managed') await this.db.commitTransaction();
       return {invoiceId,invoiceNumber,subtotalMinor,discountMinor,totalMinor,collectedMinor,dueMinor:totalMinor-collectedMinor,lineCount:prepared.length};
     } catch (error) {
-      await this.db.rollbackTransaction().catch(() => undefined);
+      if (transactionMode === 'managed') await this.db.rollbackTransaction().catch(() => undefined);
       throw error;
     }
   }
