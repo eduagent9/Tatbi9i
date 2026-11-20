@@ -10,6 +10,7 @@ export interface StockMovementInput {
 }
 
 export interface StockBalanceRow { product_id: string; variant_id: string | null; location_id: string; batch_id: string | null; quantity: number; }
+export interface ExpiryAlertRow { product_id:string; product_name:string; batch_id:string; batch_code:string|null; expiry_date:string; location_label:string; quantity:number; }
 
 function nonEmpty(value: string, label: string): string {
   const clean = value.trim(); if (!clean) throw new Error(label + ' مطلوب.'); return clean;
@@ -60,6 +61,20 @@ export class StockRepository {
       await this.db.rollbackTransaction().catch(() => undefined);
       throw error;
     }
+  }
+
+  async getExpiryAlerts(): Promise<ExpiryAlertRow[]> {
+    const result=await this.db.query(
+      `SELECT p.id AS product_id,p.name AS product_name,pb.id AS batch_id,pb.batch_code,pb.expiry_date,
+       sl.label AS location_label,sb.quantity
+       FROM stock_balances sb
+       JOIN products p ON p.id=sb.product_id
+       JOIN product_batches pb ON pb.id=sb.batch_id
+       JOIN stock_locations sl ON sl.id=sb.location_id
+       WHERE sb.quantity>0 AND pb.expiry_date IS NOT NULL
+       ORDER BY pb.expiry_date ASC,p.name COLLATE NOCASE`,
+    );
+    return (result.values??[]) as unknown as ExpiryAlertRow[];
   }
 
   async getBalances(): Promise<StockBalanceRow[]> {
