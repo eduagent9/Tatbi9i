@@ -584,6 +584,7 @@ export default function App() {
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
+    if(!requirePermission('manage_products'))return;
     event.preventDefault();
     if (!repository) return;
     setError(''); setNotice(''); setSaving(true);
