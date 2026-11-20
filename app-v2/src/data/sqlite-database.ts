@@ -10,6 +10,7 @@ import localOwner from './migrations/004_local_owner.sql?raw';
 import expensesSchema from './migrations/005_expenses.sql?raw';
 import stockCountsSchema from './migrations/006_stock_counts.sql?raw';
 import returnTraceabilitySchema from './migrations/007_return_traceability.sql?raw';
+import invoiceBatchAllocationsSchema from './migrations/008_invoice_batch_allocations.sql?raw';
 
 export interface SqliteExecutor {
   execute(statement: string): Promise<unknown>;
@@ -40,6 +41,7 @@ export const APP_MIGRATIONS: Migration[] = [
   { version: 5, name: 'expenses', sql: expensesSchema },
   { version: 6, name: 'stock_counts', sql: stockCountsSchema },
   { version: 7, name: 'return_traceability', sql: returnTraceabilitySchema },
+  { version: 8, name: 'invoice_batch_allocations', sql: invoiceBatchAllocationsSchema },
 ];
 
 export async function applyMigrations(
