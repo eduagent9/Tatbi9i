@@ -167,9 +167,11 @@ export default function App() {
     setError('');setNotice('');setSaving(true);
     try{
       const db=await openAppDatabase(),now=new Date().toISOString();
-      const location=await db.query("SELECT id FROM stock_locations WHERE vehicle_id=? AND location_type='vehicle' AND is_active=1",[order.assigned_vehicle_id]);
+      const location=await db.query("SELECT sl.id,v.assigned_user_id,u.role FROM stock_locations sl JOIN vehicles v ON v.id=sl.vehicle_id LEFT JOIN users u ON u.id=v.assigned_user_id WHERE v.id=? AND v.vehicle_type='delivery' AND sl.location_type='vehicle' AND sl.is_active=1",[order.assigned_vehicle_id]);
       const destination=location.values?.[0]?.id;
-      if(!destination)throw new Error('مخزون السيارة مازال ما تخلقش. زيد السيارة من قسم الجرد والتحويلات.');
+      const driverId=location.values?.[0]?.assigned_user_id;
+      if(!destination)throw new Error('مخزون سيارة التوصيل مازال ما تخلقش.');
+      if(!driverId||location.values?.[0]?.role!=='delivery_driver')throw new Error('عيّن سائقاً نشيطاً لسيارة التوصيل قبل التحميل.');
       const already=await db.query("SELECT id FROM stock_movements WHERE reference_type='sales_order_load' AND reference_id=? LIMIT 1",[order.id]);
       if(already.values?.length)throw new Error('هاد الطلب سبق تحمّل للسيارة؛ ما يمكنش نعاودو التحميل.');
       const lines=await db.query('SELECT product_id,variant_id,quantity,product_name_snapshot FROM sales_order_lines WHERE order_id=? ORDER BY rowid',[order.id]);
@@ -188,7 +190,7 @@ export default function App() {
             const destinationBalance=await db.query('SELECT id,quantity FROM stock_balances WHERE product_id=? AND variant_id IS ? AND location_id=? AND batch_id IS ? LIMIT 1',[line.product_id,line.variant_id??null,destination,balance.batch_id??null]);
             if(destinationBalance.values?.[0])await db.run('UPDATE stock_balances SET quantity=?,updated_at=? WHERE id=?',[Number(destinationBalance.values[0].quantity)+take,now,destinationBalance.values[0].id]);
             else await db.run("INSERT INTO stock_balances (id,product_id,variant_id,location_id,batch_id,quantity,updated_at) VALUES (?,?,?,?,?,?,?)",[crypto.randomUUID(),line.product_id,line.variant_id??null,destination,balance.batch_id??null,take,now]);
-            await db.run("INSERT INTO stock_movements (id,product_id,variant_id,batch_id,from_location_id,to_location_id,quantity,movement_type,reference_type,reference_id,performed_by,responsible_user_id,occurred_at,note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",[crypto.randomUUID(),line.product_id,line.variant_id??null,balance.batch_id??null,'loc-depot-main',destination,take,'load_vehicle','sales_order_load',order.id,'local-owner',null,now,'تحميل طلب '+order.order_number+' للسيارة']);
+            await db.run("INSERT INTO stock_movements (id,product_id,variant_id,batch_id,from_location_id,to_location_id,quantity,movement_type,reference_type,reference_id,performed_by,responsible_user_id,occurred_at,note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",[crypto.randomUUID(),line.product_id,line.variant_id??null,balance.batch_id??null,'loc-depot-main',destination,take,'load_vehicle','sales_order_load',order.id,'local-owner',String(driverId),now,'تحميل طلب '+order.order_number+' للسيارة']);
             remaining-=take;
           }
         }
