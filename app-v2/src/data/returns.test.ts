@@ -8,7 +8,7 @@ function dbMock(options:{status?:string;failMovement?:boolean;priorQty?:number}=
  const db:SqliteExecutor={
   execute:vi.fn(async()=>undefined),
   query:vi.fn(async(sql:string)=>{
-   if(sql.includes('FROM invoices'))return{values:[{...invoice,status:options.status??invoice.status}]};
+   if(sql.includes('FROM invoices'))return{values:[{...invoice,status:options.status??invoice.status,confirmed_at:options.status==='draft'?null:invoice.confirmed_at}]};
    if(sql.includes('FROM invoice_lines'))return{values:[{...line,returned_quantity:options.priorQty??0,returned_value_minor:(options.priorQty??0)*500}]};
    if(sql.includes('FROM product_batches'))return{values:[{id:'batch1'}]};
    if(sql.includes('FROM stock_balances'))return{values:balance?[balance]:[]};
