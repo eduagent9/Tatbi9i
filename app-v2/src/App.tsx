@@ -18,6 +18,7 @@ export default function App() {
   const [stockProductId, setStockProductId] = useState('');
   const [stockQuantity, setStockQuantity] = useState('1');
   const [stockDirection, setStockDirection] = useState<'in' | 'out'>('in');
+  const [stockOutType, setStockOutType] = useState<'delivery' | 'damage' | 'supplier_return'>('delivery');
 
   const refresh = useCallback(async (repo: ProductRepository) => setProducts(await repo.list()), []);
   useEffect(() => {
@@ -48,7 +49,7 @@ export default function App() {
         id: crypto.randomUUID(), productId: stockProductId,
         fromLocationId: stockDirection === 'out' ? 'loc-depot-main' : null,
         toLocationId: stockDirection === 'in' ? 'loc-depot-main' : null,
-        quantity, movementType: stockDirection === 'in' ? 'purchase_receipt' : 'damage',
+        quantity, movementType: stockDirection === 'in' ? 'purchase_receipt' : stockOutType,
         note: stockDirection === 'in' ? 'إدخال للمستودع' : 'إخراج من المستودع',
       });
       await refresh(repository); setStockQuantity('1'); setNotice('تسجلات حركة المخزون بنجاح.');
@@ -98,6 +99,7 @@ export default function App() {
           <form onSubmit={submitStock}>
             <label>المنتج<select required value={stockProductId} onChange={e => setStockProductId(e.target.value)}><option value="">اختار المنتج</option>{products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
             <div className="two-cols"><label>نوع الحركة<select value={stockDirection} onChange={e => setStockDirection(e.target.value as 'in'|'out')}><option value="in">إدخال للمستودع</option><option value="out">إخراج من المستودع</option></select></label><label>الكمية<input type="number" min="0.01" step="0.01" required value={stockQuantity} onChange={e => setStockQuantity(e.target.value)} /></label></div>
+            {stockDirection === 'out' && <label>سبب الإخراج<select value={stockOutType} onChange={e => setStockOutType(e.target.value as 'delivery'|'damage'|'supplier_return')}><option value="delivery">تسليم / توزيع</option><option value="damage">تالف</option><option value="supplier_return">إرجاع للمورد</option></select></label>}
             <button className="primary-button" disabled={saving || products.length === 0}>{saving ? 'كيتم التسجيل...' : 'تسجيل حركة المخزون'}</button>
           </form>
           <p className="hint">أي إخراج بكمية أكبر من المخزون المتوفر غادي يترفض. كل حركة كتتسجل مع تحديث الرصيد داخل نفس المعاملة.</p>
