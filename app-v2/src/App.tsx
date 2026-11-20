@@ -133,6 +133,7 @@ export default function App() {
   async function submitDistributionOrder(event:FormEvent<HTMLFormElement>){
     event.preventDefault();
     if(!orderCustomerId||!orderCreatorId||orderLines.length===0||orderLines.some(line=>!line.productId||!Number.isFinite(Number(line.quantity))||Number(line.quantity)<=0)){setError('اختار الزبون ومندوب الطلبات والمنتجات والكميات الصحيحة.');return;}
+    if(new Set(orderLines.map(line=>line.productId)).size!==orderLines.length){setError('ما تعاودش نفس المنتج فسطور الطلب؛ جمع الكمية فسطر واحد.');return;}
     setError('');setNotice('');setSaving(true);
     try{
       const db=await openAppDatabase(),now=new Date().toISOString(),id=crypto.randomUUID(),number='CMD-'+Date.now();
