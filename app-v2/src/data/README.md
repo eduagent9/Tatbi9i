@@ -9,6 +9,7 @@
 - `stock.ts` records stock movements and balance changes in one transaction.
 - `sales.ts` creates confirmed invoices, immutable line snapshots, initial partial/full collections, stock deductions, stock movement history, and audit events in one transaction. It selects expiring batches first when expiry dates are available.
 - `payments.ts` records later customer debt collections, updates the invoice collected balance, and writes payment history and audit events in one transaction. It refuses overpayment and does not rewrite legacy invoices without a confirmed new-format timestamp.
+- `customers.ts` creates and searches the customer directory; customer debt is calculated from invoice balances rather than maintained as a separately mutable total. Legacy invoice debt is read from its preserved legacy balance field.
 - Sales and stock repositories are service-layer foundations; the current screen does not yet expose the full invoice workflow.
 - Legacy dry-run and validation modules are read-only. No import is started automatically.
 - The first schema is still a foundation draft. Runtime validation on a real Android device, backup/restore, and the SQLCipher/plugin licensing review remain release gates.
