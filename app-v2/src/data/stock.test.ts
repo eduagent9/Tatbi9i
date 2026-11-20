@@ -37,6 +37,17 @@ describe('StockRepository', () => {
     await expect(repo.record({id:'m3',productId:'p1',fromLocationId:'depot',quantity:2,movementType:'sale'})).rejects.toThrow('movement failed');
     expect(db.rollbackTransaction).toHaveBeenCalledOnce();
   });
+
+  it('lists only batches with a positive balance and expiry date',async()=>{
+    const db=stockDb().db;
+    db.query=vi.fn(async(sql:string)=>sql.includes('JOIN product_batches')
+      ? {values:[{product_id:'p1',product_name:'ماء',batch_id:'b1',batch_code:'LOT-1',expiry_date:'2026-12-01',location_label:'المستودع الرئيسي',quantity:8}]}
+      : {values:[]});
+    const rows=await new StockRepository(db).getExpiryAlerts();
+    expect(rows).toEqual([{product_id:'p1',product_name:'ماء',batch_id:'b1',batch_code:'LOT-1',expiry_date:'2026-12-01',location_label:'المستودع الرئيسي',quantity:8}]);
+    expect(db.query).toHaveBeenCalledWith(expect.stringContaining('sb.quantity>0'));
+  });
+
   it('rejects zero quantity and identical transfer locations', async () => {
     const repo=new StockRepository(stockDb().db);
     await expect(repo.record({id:'m4',productId:'p1',toLocationId:'depot',quantity:0,movementType:'opening'})).rejects.toThrow(RangeError);
