@@ -167,11 +167,11 @@ export default function App() {
     setError('');setNotice('');setSaving(true);
     try{
       const db=await openAppDatabase(),now=new Date().toISOString();
-      const location=await db.query("SELECT sl.id,v.assigned_user_id,u.role FROM stock_locations sl JOIN vehicles v ON v.id=sl.vehicle_id LEFT JOIN users u ON u.id=v.assigned_user_id WHERE v.id=? AND v.vehicle_type='delivery' AND sl.location_type='vehicle' AND sl.is_active=1",[order.assigned_vehicle_id]);
+      const location=await db.query("SELECT sl.id,v.assigned_user_id,u.role,u.is_active FROM stock_locations sl JOIN vehicles v ON v.id=sl.vehicle_id LEFT JOIN users u ON u.id=v.assigned_user_id WHERE v.id=? AND v.vehicle_type='delivery' AND sl.location_type='vehicle' AND sl.is_active=1 AND v.is_active=1",[order.assigned_vehicle_id]);
       const destination=location.values?.[0]?.id;
       const driverId=location.values?.[0]?.assigned_user_id;
       if(!destination)throw new Error('مخزون سيارة التوصيل مازال ما تخلقش.');
-      if(!driverId||location.values?.[0]?.role!=='delivery_driver')throw new Error('عيّن سائقاً نشيطاً لسيارة التوصيل قبل التحميل.');
+      if(!driverId||location.values?.[0]?.role!=='delivery_driver'||Number(location.values?.[0]?.is_active)!==1)throw new Error('عيّن سائقاً نشيطاً لسيارة التوصيل قبل التحميل.');
       const already=await db.query("SELECT id FROM stock_movements WHERE reference_type='sales_order_load' AND reference_id=? LIMIT 1",[order.id]);
       if(already.values?.length)throw new Error('هاد الطلب سبق تحمّل للسيارة؛ ما يمكنش نعاودو التحميل.');
       const lines=await db.query('SELECT product_id,variant_id,quantity,product_name_snapshot FROM sales_order_lines WHERE order_id=? ORDER BY rowid',[order.id]);
@@ -223,7 +223,7 @@ export default function App() {
       const customerId=orderInfo.values?.[0]?.customer_id;
       const driverId=location.values?.[0]?.assigned_user_id;
       if(!customerId)throw new Error('الزبون المرتبط بالطلب غير موجود.');
-      if(!driverId||location.values?.[0]?.role!=='delivery_driver')throw new Error('عيّن سائقاً نشيطاً لسيارة التوصيل قبل إصدار فاتورة التسليم.');
+      if(!driverId||location.values?.[0]?.role!=='delivery_driver'||Number(location.values?.[0]?.is_active)!==1)throw new Error('عيّن سائقاً نشيطاً لسيارة التوصيل قبل إصدار فاتورة التسليم.');
       const collectedMinor=madToMinorUnits(Number(deliveryCollectedAmount||0));
       if(!Number.isSafeInteger(collectedMinor)||collectedMinor<0)throw new Error('راجع المبلغ النقدي المستخلص.');
       const result=await new SalesRepository(db).create({
@@ -308,7 +308,7 @@ export default function App() {
   }
 
   async function changeOrderStatus(order:DistributionOrderRow,next:DistributionOrderRow['status']){
-    const allowed:Record<DistributionOrderRow['status'],DistributionOrderRow['status'][]>= {draft:['submitted','cancelled'],submitted:['accepted','cancelled'],accepted:['preparing','cancelled'],preparing:['ready','cancelled'],ready:['partially_delivered','delivered'],partially_delivered:['delivered'],delivered:[],cancelled:[]};
+    const allowed:Record<DistributionOrderRow['status'],DistributionOrderRow['status'][]>= {draft:['submitted','cancelled'],submitted:['accepted','cancelled'],accepted:['preparing','cancelled'],preparing:['ready','cancelled'],ready:[],partially_delivered:[],delivered:[],cancelled:[]};
     if(!allowed[order.status].includes(next)){setError('هاد الانتقال ما مسموحش من الحالة الحالية.');return;}
     setError('');setNotice('');setSaving(true);
     try{
