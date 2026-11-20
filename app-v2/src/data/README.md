@@ -1,21 +1,9 @@
-# Data layer boundary
+# Data layer
 
-The new UI must not read or write `localStorage` directly. Database access will be introduced behind typed repositories/services.
-
-## Safety rules
-
-- Use transactions for every operation changing stock, invoices, payments, returns, or cash reconciliation.
-- Keep historical invoice and purchase line snapshots immutable.
-- Use stable IDs and versioned migrations.
-- Store new money as integer Moroccan centimes; legacy numeric values must be retained raw until reconciled.
-- Preserve original legacy date strings; normalize only when parsing is unambiguous.
-- Never automatically read, mutate, or clear `localStorage` key `tatbiqi.database.v1`.
-- Legacy validation is read-only and reports errors/warnings; it never repairs or imports records.
-- Do not enable real sales workflows until SQLite Android runtime tests, repository transactions, and import dry-run reconciliation pass.
-
-## Current implementation
-
-- `legacy-validation.ts`: structural validation, duplicate/missing IDs, and dangling invoice references.
-- `money.ts`: safe conversion between MAD and integer centimes.
-- `migrations/001_initial_schema.sql`: initial schema draft.
-- No live SQLite connection or import operation is enabled yet.
+- The legacy browser data key `tatbiqi.database.v1` is read-only input for a future, explicitly approved import. No code in this foundation writes to or deletes it.
+- New persistence is SQLite through `@capacitor-community/sqlite` and is enabled only in the native Capacitor app.
+- The web preview intentionally reports that persistent SQLite is unavailable; it does not silently fall back to localStorage or pretend data is saved.
+- `sqlite-database.ts` owns the native connection and sequential, transactional schema migration runner.
+- Migration versions are append-only. Never edit a migration that may already have shipped; add the next numbered migration instead.
+- The first schema is still a foundation draft. Runtime validation on a real Android device, backup/restore, and the SQLCipher/plugin licensing review remain release gates.
+- Legacy dry-run and validation modules are read-only. No import is started automatically.
