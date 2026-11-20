@@ -8,6 +8,7 @@ import initialSchema from './migrations/001_initial_schema.sql?raw';
 export interface SqliteExecutor {
   execute(statement: string): Promise<unknown>;
   query(statement: string, values?: unknown[]): Promise<{ values?: Array<Record<string, unknown>> }>;
+  run(statement: string, values?: unknown[]): Promise<unknown>;
   beginTransaction(): Promise<unknown>;
   commitTransaction(): Promise<unknown>;
   rollbackTransaction(): Promise<unknown>;
@@ -56,7 +57,7 @@ export async function applyMigrations(
     await db.beginTransaction();
     try {
       await db.execute(migration.sql);
-      await db.query(
+      await db.run(
         'INSERT INTO schema_migrations (version, name) VALUES (?, ?);',
         [migration.version, migration.name],
       );
@@ -80,7 +81,7 @@ class CapacitorSqliteFactory implements SqliteConnectionFactory {
   async open(name: string): Promise<SqliteExecutor> {
     const connection = await this.sqlite.createConnection(name, false, 'no-encryption', 1, false);
     await connection.open();
-    return connection;
+    return connection as unknown as SqliteExecutor;
   }
 
   async close(name: string): Promise<void> {
