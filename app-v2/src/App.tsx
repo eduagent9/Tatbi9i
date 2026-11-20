@@ -383,14 +383,16 @@ export default function App() {
     event.preventDefault();
     const cleanName=teamName.trim();
     if(!cleanName){setError('اسم المستخدم مطلوب.');return;}
+    if(!isValidPin(teamPin)){setError('رمز PIN ديال المستخدم خاصو يكون من 4 حتى 8 أرقام.');return;}
     setError('');setNotice('');setSaving(true);
     try{
-      const db=await openAppDatabase(),now=new Date().toISOString(),id=crypto.randomUUID();
-      await db.run('INSERT INTO users (id,display_name,phone,role,is_active,created_at,updated_at) VALUES (?,?,?,?,1,?,?)',[id,cleanName,teamPhone.trim()||null,teamRole,now,now]);
-      const result=await db.query('SELECT id,display_name,phone,role,is_active FROM users ORDER BY display_name');
-      setTeamUsers((result.values??[]) as unknown as TeamUser[]);
-      setTeamName('');setTeamPhone('');
-      setNotice('تسجل عضو الفريق بنجاح.');
+      const db=await openAppDatabase(),now=new Date().toISOString(),id=crypto.randomUUID(),credentials=await hashPin(teamPin);
+      await db.run('INSERT INTO users (id,display_name,phone,role,is_active,created_at,updated_at,pin_salt,pin_hash) VALUES (?,?,?,?,1,?,?,?,?)',[id,cleanName,teamPhone.trim()||null,teamRole,now,now,credentials.salt,credentials.hash]);
+      const result=await db.query('SELECT id,display_name,phone,role,is_active,pin_salt,pin_hash FROM users ORDER BY display_name');
+      const updatedUsers=(result.values??[]) as unknown as AuthUser[];
+      setTeamUsers(updatedUsers);setAuthUsers(updatedUsers);
+      setTeamName('');setTeamPhone('');setTeamPin('');
+      setNotice('تسجل عضو الفريق ورمز الدخول ديالو بنجاح.');
     }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تسجيل عضو الفريق.');}
     finally{setSaving(false);}
   }
