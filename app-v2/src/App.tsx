@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { formatMad, formatSignedMad, madToMinorUnits } from './data/money';
 import { openAppDatabase } from './data/sqlite-database';
 import { ProductRepository, type ProductRecord } from './data/products';
-import { StockRepository, type ExpiryAlertRow } from './data/stock';
+import { StockRepository, type ExpiryAlertRow, type StockMovementRecord } from './data/stock';
 import { CustomerRepository, type CustomerRecord } from './data/customers';
 import { SalesRepository } from './data/sales';
 import { PaymentRepository, type OutstandingInvoice } from './data/payments';
@@ -17,6 +17,7 @@ export default function App() {
   const [repository, setRepository] = useState<ProductRepository | null>(null);
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [expiryAlerts, setExpiryAlerts] = useState<ExpiryAlertRow[]>([]);
+  const [movementHistory, setMovementHistory] = useState<StockMovementRecord[]>([]);
   const [financialSummary, setFinancialSummary] = useState<FinancialSummary | null>(null);
   const [expenseCategory, setExpenseCategory] = useState('نقل');
   const [expenseAmount, setExpenseAmount] = useState('');
@@ -61,6 +62,7 @@ export default function App() {
       setSuppliers(await new SupplierRepository(db).list());
       setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
       setExpiryAlerts(await new StockRepository(db).getExpiryAlerts());
+      setMovementHistory(await new StockRepository(db).getRecentMovements());
       setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
     }).catch(reason => { if (alive) setError(reason instanceof Error ? reason.message : 'تعذر فتح قاعدة البيانات.'); })
       .finally(() => { if (alive) setLoading(false); });
@@ -86,7 +88,7 @@ export default function App() {
         quantity, movementType: stockDirection === 'in' ? 'purchase_receipt' : stockOutType,
         note: stockDirection === 'in' ? 'إدخال للمستودع' : 'إخراج من المستودع',
       });
-      await refresh(repository); setExpiryAlerts(await new StockRepository(db).getExpiryAlerts()); setStockQuantity('1'); setNotice('تسجلات حركة المخزون بنجاح.');
+      await refresh(repository); setExpiryAlerts(await new StockRepository(db).getExpiryAlerts()); setMovementHistory(await new StockRepository(db).getRecentMovements()); setStockQuantity('1'); setNotice('تسجلات حركة المخزون بنجاح.');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر تسجيل الحركة.'); }
     finally { setSaving(false); }
   }
@@ -154,6 +156,7 @@ export default function App() {
       await refresh(repo);
       setSuppliers(await new SupplierRepository(db).list());
       setExpiryAlerts(await new StockRepository(db).getExpiryAlerts());
+      setMovementHistory(await new StockRepository(db).getRecentMovements());
       setPurchaseLines([{productId:'',quantity:'1',unitCost:'',batchCode:'',expiryDate:''}]);
       setNotice('تسجل وصل الشراء ' + result.receiptNumber + ' بمجموع ' + formatMad(result.totalMinor));
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر تسجيل التوريد.'); }
@@ -200,6 +203,7 @@ export default function App() {
       setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
       setSuppliers(await new SupplierRepository(db).list());
       setExpiryAlerts(await new StockRepository(db).getExpiryAlerts());
+      setMovementHistory(await new StockRepository(db).getRecentMovements());
       setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
       setSaleLines([{productId:'',quantity:'1'}]); setSaleDiscount('0'); setSaleCollected('');
       setNotice('تسجلات الفاتورة ' + result.invoiceNumber + ' بنجاح. المتبقي على الزبون: ' + formatMad(result.dueMinor));
@@ -261,6 +265,12 @@ export default function App() {
             <button className="primary-button" disabled={saving}>{saving ? 'كيتم الحفظ...' : 'إضافة الزبون'}</button>
           </form>
           <div className="customer-list">{customers.length === 0 ? <p className="hint">مازال ما تسجل حتى زبون.</p> : customers.map(customer => <article className="customer-row" key={customer.id}><div><strong>{customer.name}</strong><span>{customer.phone || customer.city || 'بدون معلومات إضافية'}</span></div><div><strong>{formatMad(customer.debt_minor)}</strong><span>الدين · {customer.invoice_count} فاتورة</span></div></article>)}</div>
+        </section>
+        <section className="panel movement-panel"><div className="panel-heading"><div><h3>سجل حركة المخزون</h3><p>آخر الحركات المسجلة بالتاريخ والوجهة</p></div><span className="step-mark">11</span></div>
+          {movementHistory.length===0 ? <p className="hint">مازال ما تسجلات حتى حركة.</p> : <div className="movement-list">{movementHistory.map(movement=><article className="movement-row" key={movement.id}>
+            <div><strong>{movement.product_name}</strong><span>{movement.movement_type==='purchase_receipt'?'توريد':movement.movement_type==='sale'?'بيع':movement.movement_type==='delivery'?'توزيع':movement.movement_type==='damage'?'تالف':movement.movement_type==='supplier_return'?'إرجاع للمورد':movement.movement_type==='stock_count'?'جرد':'حركة مخزون'} · {new Date(movement.occurred_at).toLocaleString('ar-MA')}</span><small>{movement.from_label ? 'من '+movement.from_label : ''}{movement.to_label ? ' ← '+movement.to_label : ''}{movement.note ? ' · '+movement.note : ''}</small></div>
+            <strong>{movement.quantity}</strong>
+          </article>)}</div>}
         </section>
         <section className="panel finance-panel"><div className="panel-heading"><div><h3>ملخص الحسابات</h3><p>إجمالي الفواتير المؤكدة منذ بداية الاستخدام</p></div><span className="step-mark">09</span></div>
           {financialSummary ? <div className="finance-grid">
