@@ -25,6 +25,12 @@ jobs:
           node <<'NODE'
           const fs = require('fs');
           const html = fs.readFileSync('index.html', 'utf8');
+          const manifest = JSON.parse(fs.readFileSync('manifest.webmanifest', 'utf8'));
+          if (!manifest.icons?.some(icon => icon.src === './icon.svg')) throw new Error('PWA app icon missing from manifest');
+          if (!fs.existsSync('icon.svg')) throw new Error('PWA icon asset missing');
+          const sw = fs.readFileSync('sw.js', 'utf8');
+          if (!sw.includes('tatbiqi-v33') || !sw.includes("'./icon.svg'")) throw new Error('Service worker cache does not include current app icon');
+
           const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
           if (!scripts.length) throw new Error('No inline application script found');
           for (const script of scripts) new Function(script[1]);
@@ -94,7 +100,7 @@ jobs:
           context.cartQty('p2',-1);
           if (context.cart[0].qty !== 1) throw new Error('Cart quantity decrement failed');
           console.log('Business logic checks passed: expiry dates, monthly date parsing, POS cart quantities, and discount boundaries.');
-          console.log('Static checks passed: JavaScript syntax, unique HTML IDs, core workflows.');
+          console.log('Static checks passed: JavaScript syntax, unique HTML IDs, core workflows and PWA install assets.');
           NODE
       - name: Configure Pages
         uses: actions/configure-pages@v5
