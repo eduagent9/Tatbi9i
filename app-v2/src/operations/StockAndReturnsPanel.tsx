@@ -9,6 +9,7 @@ type CountRow={product_id:string;product_name:string;variant_id:string|null;vari
 type InvoiceOption={id:string;invoice_number:string;customer_name:string;created_at:string};
 type InvoiceLine={id:string;product_id:string;product_name:string;variant_id:string|null;quantity:number;unit_price_minor:number;remaining:number};
 type LocationOption={id:string;label:string};
+type ReturnBatchOption={batchId:string|null;label:string;quantity:number};
 type TransferBalance={balance_id:string;product_id:string;product_name:string;variant_id:string|null;variant_name:string|null;batch_id:string|null;batch_code:string|null;location_id:string;location_label:string;quantity:number};
 const owner='local-owner',depot='loc-depot-main';
 const uid=()=>crypto.randomUUID();
@@ -21,6 +22,8 @@ export function StockAndReturnsPanel(){
  const [invoiceLines,setInvoiceLines]=useState<InvoiceLine[]>([]);
  const [returnQty,setReturnQty]=useState<Record<string,string>>({});
  const [returnCondition,setReturnCondition]=useState<Record<string,ReturnCondition>>({});
+ const [returnBatch,setReturnBatch]=useState<Record<string,string>>({});
+ const [returnBatchOptions,setReturnBatchOptions]=useState<Record<string,ReturnBatchOption[]>>({});
  const [countNote,setCountNote]=useState('');
  const [returnReason,setReturnReason]=useState('');
  const [locations,setLocations]=useState<LocationOption[]>([]);
@@ -73,12 +76,24 @@ export function StockAndReturnsPanel(){
   .catch(e=>{if(live)setError(e instanceof Error?e.message:'تعذر تحميل بيانات الجرد والمرتجعات.');});
   return()=>{live=false;};},[]);
  useEffect(()=>{if(!db||!invoiceId){setInvoiceLines([]);return;}let live=true;
-  db.query(`SELECT il.id,il.product_id,il.product_name_snapshot AS product_name,il.variant_id,il.quantity,il.unit_price_minor,
+  Promise.all([
+   db.query(`SELECT il.id,il.product_id,il.product_name_snapshot AS product_name,il.variant_id,il.quantity,il.unit_price_minor,
     il.quantity-COALESCE((SELECT SUM(rl.quantity) FROM product_return_lines rl JOIN product_returns r ON r.id=rl.return_id
       WHERE rl.invoice_line_id=il.id AND r.status='completed'),0) AS remaining
-    FROM invoice_lines il WHERE il.invoice_id=? ORDER BY il.rowid`,[invoiceId])
-   .then(r=>{if(live)setInvoiceLines((r.values??[]) as unknown as InvoiceLine[]);})
-   .catch(e=>{if(live)setError(e instanceof Error?e.message:'تعذر تحميل تفاصيل الفاتورة.');});
+    FROM invoice_lines il WHERE il.invoice_id=? ORDER BY il.rowid`,[invoiceId]),
+   db.query(`SELECT a.invoice_line_id,a.batch_id,pb.batch_code,SUM(a.quantity) AS quantity
+    FROM invoice_line_batch_allocations a LEFT JOIN product_batches pb ON pb.id=a.batch_id
+    WHERE a.invoice_line_id IN (SELECT id FROM invoice_lines WHERE invoice_id=?)
+    GROUP BY a.invoice_line_id,a.batch_id,pb.batch_code ORDER BY pb.expiry_date,pb.batch_code`,[invoiceId])
+  ]).then(([linesResult,batchesResult])=>{
+   if(!live)return;
+   setInvoiceLines((linesResult.values??[]) as unknown as InvoiceLine[]);
+   const grouped:Record<string,ReturnBatchOption[]>={};
+   for(const row of (batchesResult.values??[]) as unknown as Array<{invoice_line_id:string;batch_id:string|null;batch_code:string|null;quantity:number}>){
+    (grouped[row.invoice_line_id]??=[]).push({batchId:row.batch_id,label:row.batch_code?('دفعة '+row.batch_code):'مخزون بدون رقم دفعة',quantity:Number(row.quantity)});
+   }
+   setReturnBatchOptions(grouped);
+  }).catch(e=>{if(live)setError(e instanceof Error?e.message:'تعذر تحميل تفاصيل الفاتورة والدفعات الأصلية.');});
   return()=>{live=false;};
  },[db,invoiceId]);
 
@@ -124,14 +139,16 @@ export function StockAndReturnsPanel(){
   event.preventDefault();if(!db||!selectedInvoice)return;setError('');setMessage('');
   const lines=invoiceLines.filter(x=>Number(returnQty[x.id]||0)>0);
   if(!lines.length){setError('حدد كمية مرتجعة واحدة على الأقل.');return;}
+  if(lines.some(x=>returnBatch[x.id]===undefined)){setError('اختار الدفعة الأصلية لكل منتج مرتجع.');return;}
   if(lines.some(x=>Number(returnQty[x.id])>x.remaining)){setError('كمية المرتجع أكبر من الكمية المتبقية في الفاتورة.');return;}
   if(!returnReason.trim()){setError('كتب سبب الإرجاع.');return;}
   setBusy(true);
   try{
    const result=await new ReturnsRepository(db).complete({id:uid(),returnNumber:'RET-'+Date.now(),invoiceId,processedBy:owner,
     destinationLocationId:depot,reason:returnReason,refundMethod:'cash',
-    lines:lines.map(x=>({id:uid(),invoiceLineId:x.id,quantity:Number(returnQty[x.id]),condition:returnCondition[x.id]??'sellable'}))});
-   await loadCounts(db);await loadInvoices(db);setInvoiceId('');setReturnQty({});setReturnCondition({});setReturnReason('');
+    lines:lines.map(x=>({id:uid(),invoiceLineId:x.id,quantity:Number(returnQty[x.id]),condition:returnCondition[x.id]??'sellable',
+     batchId:returnBatch[x.id]==='__none__'?null:returnBatch[x.id]}))});
+   await loadCounts(db);await loadInvoices(db);setInvoiceId('');setReturnQty({});setReturnCondition({});setReturnBatch({});setReturnBatchOptions({});setReturnReason('');
    setMessage('تسجل المرتجع '+result.returnNumber+' بقيمة '+(result.returnedValueMinor/100).toFixed(2)+' DH. المبلغ المسترجع نقداً: '+(result.refundMinor/100).toFixed(2)+' DH.');
   }catch(e){setError(e instanceof Error?e.message:'تعذر تسجيل المرتجع.');}finally{setBusy(false);}
  }
@@ -176,12 +193,13 @@ export function StockAndReturnsPanel(){
   <h4>تسجيل مرتجع زبون</h4>
   <p className="hint">المرتجع خاصو يكون من فاتورة مؤكدة. الكمية اللي سبق ترجعَت ما يمكنش ترجع مرة ثانية. السلع القابلة للبيع فقط كترجع للمخزون.</p>
   <form onSubmit={submitReturn}>
-   <label>الفاتورة<select required value={invoiceId} onChange={e=>{setInvoiceId(e.target.value);setReturnQty({});setReturnCondition({});}}><option value="">اختار فاتورة</option>
+   <label>الفاتورة<select required value={invoiceId} onChange={e=>{setInvoiceId(e.target.value);setReturnQty({});setReturnCondition({});setReturnBatch({});setReturnBatchOptions({});}}><option value="">اختار فاتورة</option>
     {invoices.map(x=><option key={x.id} value={x.id}>{x.invoice_number} · {x.customer_name} · {new Date(x.created_at).toLocaleDateString('ar-MA')}</option>)}
    </select></label>
    {selectedInvoice&&invoiceLines.map(line=><div className="purchase-line" key={line.id}>
     <strong>{line.product_name}</strong><span className="hint">المتبقي للإرجاع: {line.remaining} · ثمن الوحدة: {(line.unit_price_minor/100).toFixed(2)} DH</span>
     <div className="two-cols"><label>الكمية<input type="number" min="0" max={line.remaining} step="0.001" value={returnQty[line.id]??''} onChange={e=>setReturnQty(current=>({...current,[line.id]:e.target.value}))} placeholder="0"/></label>
+    <label>الدفعة الأصلية<select required value={returnBatch[line.id]??''} onChange={e=>setReturnBatch(current=>({...current,[line.id]:e.target.value}))}><option value="">اختار الدفعة</option>{(returnBatchOptions[line.id]??[]).map((b,i)=><option key={b.batchId??'none-'+i} value={b.batchId??'__none__'}>{b.label} · المباع {b.quantity}</option>)}</select></label>
     <label>حالة السلعة<select value={returnCondition[line.id]??'sellable'} onChange={e=>setReturnCondition(current=>({...current,[line.id]:e.target.value as ReturnCondition}))}><option value="sellable">صالحة للبيع</option><option value="damaged">تالفة</option><option value="expired">منتهية الصلاحية</option><option value="shortage">ناقصة / غير مسترجعة للمخزون</option></select></label></div>
    </div>)}
    <label>سبب الإرجاع<input required value={returnReason} onChange={e=>setReturnReason(e.target.value)} placeholder="مثلاً: منتج معيب أو خطأ في الطلب"/></label>
