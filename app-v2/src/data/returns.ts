@@ -66,10 +66,6 @@ export class ReturnsRepository {
         if(line.quantity>remaining+1e-9)throw new RangeError('كمية المرتجع أكبر من الكمية المباعة المتبقية.');
         const batchId=line.batchId === undefined ? undefined : (line.batchId?.trim() || null);
         if(batchId===undefined)throw new Error('اختار الدفعة الأصلية للمنتج المرتجع.');
-        if(batchId){
-          const b=await this.db.query('SELECT id FROM product_batches WHERE id=? AND product_id=? AND variant_id IS ? LIMIT 1',[batchId,source.product_id,source.variant_id]);
-          if(!b.values?.length)throw new Error('دفعة الإرجاع لا تطابق المنتج.');
-        }
         const allocation=await this.db.query(
           `SELECT COUNT(*) AS allocation_count, COALESCE(SUM(a.quantity),0) AS allocated_quantity,
             COALESCE((SELECT SUM(rl.quantity) FROM product_return_lines rl
@@ -83,6 +79,13 @@ export class ReturnsRepository {
         const allocationCount=Number(allocationRow?.allocation_count??0);
         if(!Number.isSafeInteger(allocationCount)||allocationCount<0)throw new Error('سجل تخصيص دفعات الفاتورة غير صالح.');
         if(allocationCount===0){
+          const history=await this.db.query(
+            'SELECT COUNT(*) AS total_allocation_count FROM invoice_line_batch_allocations WHERE invoice_line_id=?',
+            [source.id],
+          );
+          const totalAllocationCount=Number(history.values?.[0]?.total_allocation_count??0);
+          if(!Number.isSafeInteger(totalAllocationCount)||totalAllocationCount<0)throw new Error('سجل تخصيص دفعات الفاتورة غير صالح.');
+          if(totalAllocationCount>0)throw new RangeError('الدفعة المختارة ماشي هي الدفعة الأصلية ديال هاد السطر.');
           // Compatibility for invoices created before batch-allocation migration 008.
           // Their historical batch is unknown, so only a null-batch return is safe.
           if(batchId!==null)throw new RangeError('هاد الفاتورة قديمة وما فيهاش تتبع الدفعات؛ اختار إرجاعاً بلا دفعة.');
@@ -91,7 +94,6 @@ export class ReturnsRepository {
           if(!Number.isFinite(batchRemaining)||line.quantity>batchRemaining+1e-9)
             throw new RangeError('الكمية المرتجعة كتفوت الكمية المباعة من هاد الدفعة.');
         }
-
         const cumulative=Math.round(Number(allocated.get(source.id))*((Number(source.returned_quantity)+line.quantity)/Number(source.quantity)));
         const lineValue=cumulative-Number(source.returned_value_minor);
         if(!Number.isSafeInteger(lineValue)||lineValue<0)throw new Error('قيمة المرتجع غير صالحة.');
