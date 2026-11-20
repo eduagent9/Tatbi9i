@@ -41,7 +41,7 @@ export default function App() {
   const [cashDiscrepancyReasons,setCashDiscrepancyReasons]=useState<Record<string,string>>({});
   const [orderCustomerId,setOrderCustomerId]=useState('');
   const [orderVehicleId,setOrderVehicleId]=useState('');
-  const [deliveryCollectedAmount,setDeliveryCollectedAmount]=useState('0');
+  const [deliveryCollectedAmounts,setDeliveryCollectedAmounts]=useState<Record<string,string>>({});
   const [orderLines,setOrderLines]=useState<Array<{productId:string;quantity:string}>>([{productId:'',quantity:'1'}]);
   const [teamUsers,setTeamUsers]=useState<TeamUser[]>([]);
   const [authUsers,setAuthUsers]=useState<AuthUser[]>([]);
@@ -288,8 +288,9 @@ export default function App() {
       if(!customerId)throw new Error('الزبون المرتبط بالطلب غير موجود.');
       if(!driverId||location.values?.[0]?.role!=='delivery_driver'||Number(location.values?.[0]?.is_active)!==1)throw new Error('عيّن سائقاً نشيطاً لسيارة التوصيل قبل إصدار فاتورة التسليم.');
       if(currentUser?.role!=='owner'&&driverId!==currentUser?.id)throw new Error('يمكن للسائق تسليم الطلبات المعيّنة ليه فقط.');
-      const collectedMinor=madToMinorUnits(Number(deliveryCollectedAmount||0));
+      const collectedMinor=madToMinorUnits(Number(deliveryCollectedAmounts[order.id]??'0'));
       if(!Number.isSafeInteger(collectedMinor)||collectedMinor<0)throw new Error('راجع المبلغ النقدي المستخلص.');
+      if(collectedMinor>0&&!requirePermission('collect_delivery_cash'))throw new Error('ما عندكش صلاحية تسجيل تحصيل نقدي عند التوصيل.');
       await db.beginTransaction();
       try{
         const currentOrder=await db.query('SELECT status,assigned_vehicle_id FROM sales_orders WHERE id=?',[order.id]);
@@ -328,7 +329,7 @@ export default function App() {
       setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
       setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
       setMovementHistory(await new StockRepository(db).getRecentMovements());
-      setDeliveryCollectedAmount('0');
+      setDeliveryCollectedAmounts(current=>{const next={...current};delete next[order.id];return next;});
     }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تأكيد تسليم الطلب.');}
     finally{setSaving(false);}
   }
@@ -349,10 +350,18 @@ export default function App() {
       const db=await openAppDatabase(),now=new Date().toISOString(),receipt='REC-'+Date.now();
       await db.beginTransaction();
       try{
+        const latestSession=await db.query("SELECT expected_cash_minor,status FROM cash_sessions WHERE id=?",[session.id]);
+        const live=latestSession.values?.[0];
+        if(!live||String(live.status)!=='open')throw new Error('العهدة تسلمات أو تسدات من قبل؛ حدّث اللائحة.');
+        const handedRows=await db.query('SELECT COALESCE(SUM(amount_minor),0) AS total FROM cash_handovers WHERE session_id=?',[session.id]);
+        const totalAlreadyHanded=Number(handedRows.values?.[0]?.total??0);
+        const liveExpected=Number(live.expected_cash_minor);
+        const liveOutstanding=liveExpected-totalAlreadyHanded;
+        if(!Number.isSafeInteger(liveExpected)||!Number.isSafeInteger(totalAlreadyHanded)||liveOutstanding<0||amount>liveOutstanding)throw new Error('تبدل رصيد العهدة؛ المبلغ اللي بقى أقل من المبلغ اللي بغيتي تسلم. حدّث اللائحة.');
         await db.run('INSERT INTO cash_handovers (id,session_id,from_user_id,to_user_id,amount_minor,receipt_number,received_at,note) VALUES (?,?,?,?,?,?,?,?)',[crypto.randomUUID(),session.id,session.user_id,receiver.id,amount,receipt,now,'تسليم نقدية من '+session.user_name]);
         await db.run("INSERT INTO payments (id,invoice_id,customer_id,amount_minor,method,payment_kind,received_by,received_at,note) VALUES (?,NULL,NULL,?,'cash','cash_handover',?,?,?)",[crypto.randomUUID(),amount,receiver.id,now,'وصل تسليم '+receipt]);
-        const totalHanded=Number(session.handed_cash_minor)+amount;
-        if(totalHanded>=Number(session.expected_cash_minor))await db.run("UPDATE cash_sessions SET status='submitted',closed_at=? WHERE id=? AND status='open'",[now,session.id]);
+        const totalHanded=totalAlreadyHanded+amount;
+        if(totalHanded>=liveExpected)await db.run("UPDATE cash_sessions SET status='submitted',closed_at=? WHERE id=? AND status='open'",[now,session.id]);
         await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),currentUser.id,'cash.handed_over','cash_session',session.id,JSON.stringify({receipt,from:session.user_id,to:receiver.id,amountMinor:amount,totalHanded}),now]);
         await db.commitTransaction();
       }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
@@ -374,8 +383,15 @@ export default function App() {
       const db=await openAppDatabase(),now=new Date().toISOString();
       await db.beginTransaction();
       try{
+        const latestSession=await db.query("SELECT expected_cash_minor,status FROM cash_sessions WHERE id=?",[session.id]);
+        const live=latestSession.values?.[0];
+        if(!live||String(live.status)!=='submitted')throw new Error('حالة العهدة تبدلات؛ ما بقاتش كتسنى المطابقة.');
+        const liveExpected=Number(live.expected_cash_minor);
+        const liveDifference=counted-liveExpected;
+        if(!Number.isSafeInteger(liveExpected)||liveExpected<0)throw new Error('المبلغ المتوقع فالعهدة غير صالح وخصو مراجعة.');
+        if(liveDifference!==0&&!reason)throw new Error('كتب سبب الفرق بين المبلغ المتوقع الحالي والمبلغ المعدود.');
         await db.run("UPDATE cash_sessions SET counted_cash_minor=?,discrepancy_reason=?,status='reconciled' WHERE id=? AND status='submitted'",[counted,reason||null,session.id]);
-        await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),currentUser?.id??'local-owner','cash.reconciled','cash_session',session.id,JSON.stringify({expectedMinor:session.expected_cash_minor,countedMinor:counted,differenceMinor:difference,reason}),now]);
+        await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),currentUser?.id??'local-owner','cash.reconciled','cash_session',session.id,JSON.stringify({expectedMinor:liveExpected,countedMinor:counted,differenceMinor:liveDifference,reason}),now]);
         await db.commitTransaction();
       }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
       await refreshCashSessions(db);setNotice(difference===0?'تطابقت جلسة النقدية بنجاح.':'تسجلات المطابقة مع فرق '+formatSignedMad(difference)+' وسبب الفرق.');
@@ -730,7 +746,7 @@ export default function App() {
       {currentUser?.role==='delivery_driver'&&repository&&<div className="content-grid">
         <section className="panel team-panel">
           <div className="panel-heading"><div><h3>طلبات التوصيل ديالي</h3><p>راجع الطلبات المحملة لسيارتك وسجل الكميات اللي سلمتي فعلاً</p></div><span className="step-mark">التوصيل</span></div>
-          {distributionOrders.filter(order=>teamVehicles.some(vehicle=>vehicle.id===order.assigned_vehicle_id&&vehicle.assigned_user_id===currentUser.id&&vehicle.vehicle_type==='delivery')&&['ready','partially_delivered'].includes(order.status)).length===0?<p className="hint">ما عندك حتى طلب جاهز للتسليم حالياً.</p>:distributionOrders.filter(order=>teamVehicles.some(vehicle=>vehicle.id===order.assigned_vehicle_id&&vehicle.assigned_user_id===currentUser.id&&vehicle.vehicle_type==='delivery')&&['ready','partially_delivered'].includes(order.status)).map(order=><article className="team-row" key={order.id}><div><strong>{order.order_number} · {order.customer_name}</strong><span>{order.vehicle_label||'سيارتي'} · {order.status==='ready'?'جاهز للتسليم':'تسليم جزئي'}</span><div className="order-delivery-lines">{(orderDeliveryLines[order.id]??[]).filter(line=>line.remaining_quantity>0).map(line=><label key={line.id}>{line.product_name_snapshot} · باقي {line.remaining_quantity}<input type="number" min="0" max={line.remaining_quantity} step="0.01" value={deliveryQuantities[order.id+':'+line.id]??String(line.remaining_quantity)} onChange={e=>setDeliveryQuantities(current=>({...current,[order.id+':'+line.id]:e.target.value}))}/></label>)}</div><label>النقد اللي جمعتي (DH)<input type="number" min="0" step="0.01" value={deliveryCollectedAmount} onChange={e=>setDeliveryCollectedAmount(e.target.value)} /></label><button type="button" className="primary-button" disabled={saving} onClick={()=>deliverOrder(order)}>تأكيد التسليم وإصدار الفاتورة</button></div></article>)}
+          {distributionOrders.filter(order=>teamVehicles.some(vehicle=>vehicle.id===order.assigned_vehicle_id&&vehicle.assigned_user_id===currentUser.id&&vehicle.vehicle_type==='delivery')&&['ready','partially_delivered'].includes(order.status)).length===0?<p className="hint">ما عندك حتى طلب جاهز للتسليم حالياً.</p>:distributionOrders.filter(order=>teamVehicles.some(vehicle=>vehicle.id===order.assigned_vehicle_id&&vehicle.assigned_user_id===currentUser.id&&vehicle.vehicle_type==='delivery')&&['ready','partially_delivered'].includes(order.status)).map(order=><article className="team-row" key={order.id}><div><strong>{order.order_number} · {order.customer_name}</strong><span>{order.vehicle_label||'سيارتي'} · {order.status==='ready'?'جاهز للتسليم':'تسليم جزئي'}</span><div className="order-delivery-lines">{(orderDeliveryLines[order.id]??[]).filter(line=>line.remaining_quantity>0).map(line=><label key={line.id}>{line.product_name_snapshot} · باقي {line.remaining_quantity}<input type="number" min="0" max={line.remaining_quantity} step="0.01" value={deliveryQuantities[order.id+':'+line.id]??String(line.remaining_quantity)} onChange={e=>setDeliveryQuantities(current=>({...current,[order.id+':'+line.id]:e.target.value}))}/></label>)}</div><label>النقد اللي جمعتي (DH)<input type="number" min="0" step="0.01" value={deliveryCollectedAmounts[order.id]??'0'} onChange={e=>setDeliveryCollectedAmounts(current=>({...current,[order.id]:e.target.value}))} /></label><button type="button" className="primary-button" disabled={saving} onClick={()=>deliverOrder(order)}>تأكيد التسليم وإصدار الفاتورة</button></div></article>)}
         </section>
         <section className="panel team-panel"><div className="panel-heading"><div><h3>تسليم النقدية للديبو</h3><p>سلم المبلغ اللي جمعتي وخذ وصل التسليم</p></div></div>
           <form onSubmit={submitCashHandover}>
