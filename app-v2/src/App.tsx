@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { formatMad, formatSignedMad, madToMinorUnits } from './data/money';
 import { hashPin, isValidPin, verifyPin } from './data/auth';
+import { canPerform, type AppPermission } from './data/permissions';
 import { openAppDatabase } from './data/sqlite-database';
 import { ProductRepository, type ProductRecord } from './data/products';
 import { StockRepository, type ExpiryAlertRow, type StockMovementRecord } from './data/stock';
@@ -151,6 +152,14 @@ export default function App() {
   }
 
   function logoutUser(){setCurrentUser(null);setAuthPin('');setNotice('');setError('');}
+
+  function requirePermission(permission:AppPermission):boolean{
+    if(!currentUser||!canPerform(currentUser.role,permission)){
+      setError('ما عندكش الصلاحية للقيام بهاد العملية.');
+      return false;
+    }
+    return true;
+  }
   async function refreshDistributionOrders(db:Awaited<ReturnType<typeof openAppDatabase>>){
     const rows=await db.query(`SELECT o.id,o.order_number,c.name AS customer_name,u.display_name AS created_by_name,o.assigned_vehicle_id,v.label AS vehicle_label,o.status,o.total_minor,o.created_at FROM sales_orders o JOIN customers c ON c.id=o.customer_id JOIN users u ON u.id=o.created_by LEFT JOIN vehicles v ON v.id=o.assigned_vehicle_id ORDER BY o.created_at DESC LIMIT 100`);
     const orders=(rows.values??[]) as unknown as DistributionOrderRow[];
@@ -179,8 +188,9 @@ export default function App() {
   }
 
   async function submitDistributionOrder(event:FormEvent<HTMLFormElement>){
+    if(!requirePermission('create_orders'))return;
     event.preventDefault();
-    if(!orderCustomerId||!orderCreatorId||orderLines.length===0||orderLines.some(line=>!line.productId||!Number.isFinite(Number(line.quantity))||Number(line.quantity)<=0)){setError('اختار الزبون ومندوب الطلبات والمنتجات والكميات الصحيحة.');return;}
+    if(!orderCustomerId||!currentUser?.id||orderLines.length===0||orderLines.some(line=>!line.productId||!Number.isFinite(Number(line.quantity))||Number(line.quantity)<=0)){setError('اختار الزبون ومندوب الطلبات والمنتجات والكميات الصحيحة.');return;}
     if(new Set(orderLines.map(line=>line.productId)).size!==orderLines.length){setError('ما تعاودش نفس المنتج فسطور الطلب؛ جمع الكمية فسطر واحد.');return;}
     setError('');setNotice('');setSaving(true);
     try{
@@ -200,7 +210,7 @@ export default function App() {
       try{
         await db.run('INSERT INTO sales_orders (id,order_number,customer_id,created_by,assigned_vehicle_id,status,subtotal_minor,offer_discount_minor,total_minor,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',[id,number,orderCustomerId,orderCreatorId,orderVehicleId||null,'submitted',subtotal,0,subtotal,now,now]);
         for(const line of prepared)await db.run('INSERT INTO sales_order_lines (id,order_id,product_id,quantity,unit_price_minor,line_total_minor,product_name_snapshot,unit_snapshot) VALUES (?,?,?,?,?,?,?,?)',[crypto.randomUUID(),id,line.productId,line.quantity,line.price,line.total,line.name,line.unit]);
-        await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),orderCreatorId,'order.submitted','sales_order',id,JSON.stringify({number,subtotal,lines:prepared.length}),now]);
+        await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),currentUser.id,'order.submitted','sales_order',id,JSON.stringify({number,subtotal,lines:prepared.length}),now]);
       await db.commitTransaction();
       }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
       await refreshDistributionOrders(db);setOrderLines([{productId:'',quantity:'1'}]);setNotice('تسجل الطلب '+number+' وتبعث للديبو للتحضير.');
@@ -209,6 +219,7 @@ export default function App() {
   }
 
   async function loadOrderToVehicle(order:DistributionOrderRow){
+    if(!requirePermission('load_delivery_vehicle'))return;
     if(!order.assigned_vehicle_id){setError('خاص تعيّن سيارة توصيل للطلب قبل التحميل.');return;}
     setError('');setNotice('');setSaving(true);
     try{
@@ -250,6 +261,7 @@ export default function App() {
   }
 
   async function deliverOrder(order:DistributionOrderRow){
+    if(!requirePermission('deliver_assigned_orders'))return;
     if(!order.assigned_vehicle_id){setError('الطلب ما عندوش سيارة توصيل.');return;}
     const orderLinesForDelivery=orderDeliveryLines[order.id]??[];
     const selected=orderLinesForDelivery.map(line=>({line,quantity:Number(deliveryQuantities[order.id+':'+line.id]??line.remaining_quantity)})).filter(item=>item.quantity>0);
@@ -270,6 +282,7 @@ export default function App() {
       const driverId=location.values?.[0]?.assigned_user_id;
       if(!customerId)throw new Error('الزبون المرتبط بالطلب غير موجود.');
       if(!driverId||location.values?.[0]?.role!=='delivery_driver'||Number(location.values?.[0]?.is_active)!==1)throw new Error('عيّن سائقاً نشيطاً لسيارة التوصيل قبل إصدار فاتورة التسليم.');
+      if(currentUser?.role!=='owner'&&driverId!==currentUser?.id)throw new Error('يمكن للسائق تسليم الطلبات المعيّنة ليه فقط.');
       const collectedMinor=madToMinorUnits(Number(deliveryCollectedAmount||0));
       if(!Number.isSafeInteger(collectedMinor)||collectedMinor<0)throw new Error('راجع المبلغ النقدي المستخلص.');
       await db.beginTransaction();
@@ -316,11 +329,13 @@ export default function App() {
   }
 
   async function submitCashHandover(event:FormEvent<HTMLFormElement>){
+    if(!requirePermission('handover_own_cash'))return;
     event.preventDefault();
     const session=cashSessions.find(item=>item.id===handoverSessionId);
     const receiver=teamUsers.find(item=>item.id===handoverReceiverId&&item.is_active===1);
     const amount=madToMinorUnits(Number(handoverAmount));
     if(!session||session.status!=='open'){setError('اختار جلسة نقدية مفتوحة.');return;}
+    if(currentUser?.role!=='owner'&&session.user_id!==currentUser?.id){setError('يمكنك تسليم النقدية ديال عهدتك فقط.');return;}
     if(!receiver||!['owner','depot_manager'].includes(receiver.role)){setError('المستلم خاصو يكون المالك أو مسؤول الديبو.');return;}
     const outstanding=Number(session.expected_cash_minor)-Number(session.handed_cash_minor);
     if(!Number.isSafeInteger(amount)||amount<=0||amount>outstanding){setError('مبلغ التسليم خاصو يكون أكبر من صفر وما يفوتش المبلغ اللي باقي فالعهدة.');return;}
@@ -342,6 +357,7 @@ export default function App() {
   }
 
   async function reconcileCashSession(session:CashSessionRow){
+    if(!requirePermission('reconcile_cash'))return;
     if(session.status!=='submitted'){setError('خاص جلسة النقدية تكون تسلمات قبل المطابقة.');return;}
     const counted=madToMinorUnits(Number(cashCountedAmounts[session.id]??''));
     const difference=counted-Number(session.expected_cash_minor);
@@ -354,7 +370,7 @@ export default function App() {
       await db.beginTransaction();
       try{
         await db.run("UPDATE cash_sessions SET counted_cash_minor=?,discrepancy_reason=?,status='reconciled' WHERE id=? AND status='submitted'",[counted,reason||null,session.id]);
-        await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),'local-owner','cash.reconciled','cash_session',session.id,JSON.stringify({expectedMinor:session.expected_cash_minor,countedMinor:counted,differenceMinor:difference,reason}),now]);
+        await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),currentUser?.id??'local-owner','cash.reconciled','cash_session',session.id,JSON.stringify({expectedMinor:session.expected_cash_minor,countedMinor:counted,differenceMinor:difference,reason}),now]);
         await db.commitTransaction();
       }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
       await refreshCashSessions(db);setNotice(difference===0?'تطابقت جلسة النقدية بنجاح.':'تسجلات المطابقة مع فرق '+formatSignedMad(difference)+' وسبب الفرق.');
@@ -363,6 +379,7 @@ export default function App() {
   }
 
   async function changeOrderStatus(order:DistributionOrderRow,next:DistributionOrderRow['status']){
+    if(!requirePermission('prepare_orders'))return;
     const allowed:Record<DistributionOrderRow['status'],DistributionOrderRow['status'][]>= {draft:['submitted','cancelled'],submitted:['accepted','cancelled'],accepted:['preparing','cancelled'],preparing:['ready','cancelled'],ready:[],partially_delivered:[],delivered:[],cancelled:[]};
     if(!allowed[order.status].includes(next)){setError('هاد الانتقال ما مسموحش من الحالة الحالية.');return;}
     setError('');setNotice('');setSaving(true);
@@ -371,7 +388,7 @@ export default function App() {
       await db.beginTransaction();
       try{
         await db.run('UPDATE sales_orders SET status=?,updated_at=? WHERE id=? AND status=?',[next,now,order.id,order.status]);
-        await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),'local-owner','order.status_changed','sales_order',order.id,JSON.stringify({from:order.status,to:next}),now]);
+        await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),currentUser?.id??'local-owner','order.status_changed','sales_order',order.id,JSON.stringify({from:order.status,to:next}),now]);
         await db.commitTransaction();
       }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
       await refreshDistributionOrders(db);setNotice('تحدّثت حالة الطلب '+order.order_number+'.');
@@ -380,6 +397,7 @@ export default function App() {
   }
 
   async function submitTeamMember(event:FormEvent<HTMLFormElement>){
+    if(!requirePermission('manage_team'))return;
     event.preventDefault();
     const cleanName=teamName.trim();
     if(!cleanName){setError('اسم المستخدم مطلوب.');return;}
@@ -398,6 +416,7 @@ export default function App() {
   }
 
   async function saveVehicleAssignment(vehicle:TeamVehicle){
+    if(!requirePermission('manage_vehicles'))return;
     const userId=assignment[vehicle.id]??vehicle.assigned_user_id??'';
     if(userId){
       const user=teamUsers.find(item=>item.id===userId);
@@ -421,6 +440,7 @@ export default function App() {
   }, [products, search]);
 
   async function submitStock(event: FormEvent<HTMLFormElement>) {
+    if(!requirePermission('adjust_depot_stock'))return;
     event.preventDefault();
     if (!repository || !stockProductId) return;
     setError(''); setNotice(''); setSaving(true);
@@ -440,6 +460,7 @@ export default function App() {
   }
 
   async function submitCustomer(event: FormEvent<HTMLFormElement>) {
+    if(!requirePermission('manage_customers'))return;
     event.preventDefault();
     setError(''); setNotice(''); setSaving(true);
     try {
@@ -455,6 +476,7 @@ export default function App() {
   }
 
   async function submitExpense(event: FormEvent<HTMLFormElement>) {
+    if(!requirePermission('manage_expenses'))return;
     event.preventDefault();
     setError(''); setNotice(''); setSaving(true);
     try {
@@ -472,6 +494,7 @@ export default function App() {
   }
 
   async function submitSupplier(event: FormEvent<HTMLFormElement>) {
+    if(!requirePermission('manage_purchases'))return;
     event.preventDefault();
     setError(''); setNotice(''); setSaving(true);
     try {
@@ -485,6 +508,7 @@ export default function App() {
   }
 
   async function submitPurchase(event: FormEvent<HTMLFormElement>) {
+    if(!requirePermission('manage_purchases'))return;
     event.preventDefault();
     if (!purchaseSupplierId || purchaseLines.length===0 || purchaseLines.some(line=>!line.productId||!Number.isFinite(Number(line.quantity))||Number(line.quantity)<=0||!Number.isFinite(Number(line.unitCost))||Number(line.unitCost)<0)) { setError('اختار المورد والمنتجات وتأكد من الكميات والتكاليف.'); return; }
     setError(''); setNotice(''); setSaving(true);
@@ -510,6 +534,7 @@ export default function App() {
   }
 
   async function submitCollection(event: FormEvent<HTMLFormElement>) {
+    if(!requirePermission('collect_customer_debt'))return;
     event.preventDefault();
     if (!collectionInvoiceId) { setError('اختار الفاتورة أولاً.'); return; }
     setError(''); setNotice(''); setSaving(true);
@@ -530,6 +555,7 @@ export default function App() {
   }
 
   async function submitSale(event: FormEvent<HTMLFormElement>) {
+    if(!requirePermission('create_depot_sales'))return;
     event.preventDefault();
     if (!saleCustomerId || saleLines.length===0 || saleLines.some(line=>!line.productId||!Number.isFinite(Number(line.quantity))||Number(line.quantity)<=0)) { setError('اختار الزبون والمنتجات وتأكد من الكميات.'); return; }
     setError(''); setNotice(''); setSaving(true);
