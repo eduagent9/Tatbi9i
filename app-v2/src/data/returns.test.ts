@@ -10,7 +10,7 @@ function dbMock(options:{status?:string;failMovement?:boolean;priorQty?:number}=
   query:vi.fn(async(sql:string,values?:unknown[])=>{
    if(sql.includes('FROM invoices'))return{values:[{...invoice,status:options.status??invoice.status,confirmed_at:options.status==='draft'?null:invoice.confirmed_at}]};
    if(sql.includes('FROM invoice_lines'))return{values:[{...line,returned_quantity:options.priorQty??0,returned_value_minor:(options.priorQty??0)*500}]};
-   if(sql.includes('FROM product_batches'))return{values:[{id:'batch1'}]};
+   if(sql.includes('FROM product_batches'))return{values:values?.[0]==='batch1'?[{id:'batch1'}]:[]};
    if(sql.includes('FROM invoice_line_batch_allocations'))return{values:values?.[1]==='batch1'?[{allocated_quantity:2,returned_quantity:options.priorQty??0}]:[{allocated_quantity:0,returned_quantity:0}]};
    if(sql.includes('FROM stock_balances'))return{values:balance?[balance]:[]};
    return{values:[]};
