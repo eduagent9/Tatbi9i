@@ -12,7 +12,7 @@ export interface CreatedSale {
   totalMinor: number; collectedMinor: number; dueMinor: number; lineCount: number;
 }
 type ProductRow = { id: string; name: string; base_unit: string; purchase_cost_minor: number; sale_price_minor: number };
-type BalanceRow = { id: string; batch_id: string | null; quantity: number; expiry_date: string | null };
+type BalanceRow = { id: string; batch_id: string | null; quantity: number; expiry_date: string | null; unit_cost_minor: number };
 
 function text(value: string, label: string): string {
   const result = value.trim(); if (!result) throw new Error(label + ' مطلوب.'); return result;
@@ -76,12 +76,14 @@ export class SalesRepository {
 
       for (const line of prepared) {
         const balances = await this.db.query(
-          `SELECT sb.id,sb.batch_id,sb.quantity,pb.expiry_date
+          `SELECT sb.id,sb.batch_id,sb.quantity,pb.expiry_date,
+             COALESCE((SELECT prl.unit_cost_minor FROM purchase_receipt_lines prl
+               WHERE prl.batch_id=sb.batch_id ORDER BY prl.rowid LIMIT 1), ?) AS unit_cost_minor
            FROM stock_balances sb
            LEFT JOIN product_batches pb ON pb.id=sb.batch_id
            WHERE sb.product_id=? AND sb.variant_id IS ? AND sb.location_id=? AND sb.quantity>0
            ORDER BY CASE WHEN pb.expiry_date IS NULL THEN 1 ELSE 0 END, pb.expiry_date, sb.updated_at, sb.id`,
-          [line.product.id,line.variantId,locationId],
+          [line.product.id,line.variantId,locationId,Number(line.product.purchase_cost_minor)],
         );
         const available = (balances.values ?? []) as unknown as BalanceRow[];
         const totalAvailable = available.reduce((sum,row)=>sum+Number(row.quantity),0);
@@ -99,16 +101,18 @@ export class SalesRepository {
              VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
             [this.makeId(),line.product.id,line.variantId,balance.batch_id,locationId,null,take,'sale','invoice',invoiceId,timestamp,'بيع من الفاتورة '+invoiceNumber],
           );
-          allocations.push({ batchId: balance.batch_id, quantity: take, unitCostMinor: money(Number(line.product.purchase_cost_minor), 'تكلفة الشراء') });
+          allocations.push({ batchId: balance.batch_id, quantity: take, unitCostMinor: money(Number(balance.unit_cost_minor ?? line.product.purchase_cost_minor), 'تكلفة الشراء') });
           remaining -= take;
         }
 
         const invoiceLineId = this.makeId();
+        const allocatedCostMinor = allocations.reduce((sum, allocation) => sum + allocation.quantity * allocation.unitCostMinor, 0);
+        const unitCostMinor = money(Math.round(allocatedCostMinor / line.quantity), 'تكلفة الشراء');
         await this.db.run(
           `INSERT INTO invoice_lines
            (id,invoice_id,product_id,variant_id,quantity,unit_price_minor,unit_cost_minor,line_total_minor,product_name_snapshot,unit_snapshot)
            VALUES (?,?,?,?,?,?,?,?,?,?)`,
-          [invoiceLineId,invoiceId,line.product.id,line.variantId,line.quantity,line.unitPrice,money(Number(line.product.purchase_cost_minor),'تكلفة الشراء'),line.lineTotal,line.product.name,line.product.base_unit],
+          [invoiceLineId,invoiceId,line.product.id,line.variantId,line.quantity,line.unitPrice,unitCostMinor,line.lineTotal,line.product.name,line.product.base_unit],
         );
         for (const allocation of allocations) {
           await this.db.run(
