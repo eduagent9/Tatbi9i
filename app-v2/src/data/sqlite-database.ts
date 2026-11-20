@@ -4,6 +4,7 @@ import {
   SQLiteConnection,
 } from '@capacitor-community/sqlite';
 import initialSchema from './migrations/001_initial_schema.sql?raw';
+import defaultDepot from './migrations/002_default_depot.sql?raw';
 
 export interface SqliteExecutor {
   execute(statement: string): Promise<unknown>;
@@ -28,6 +29,7 @@ export interface Migration {
 export const APP_DATABASE_NAME = 'tatbiqi';
 export const APP_MIGRATIONS: Migration[] = [
   { version: 1, name: 'initial_schema', sql: initialSchema },
+  { version: 2, name: 'default_depot', sql: defaultDepot },
 ];
 
 export async function applyMigrations(
