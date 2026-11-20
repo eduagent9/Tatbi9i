@@ -1,0 +1,17 @@
+{
+  "name": "tatbiqi",
+  "version": "1.0.0",
+  "private": true,
+  "description": "تطبيقي - التسيير التجاري ونقطة البيع",
+  "scripts": {
+    "android:prepare": "node scripts/prepare-android.mjs",
+    "android:sync": "npm run android:prepare && cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "7.4.3",
+    "@capacitor/core": "7.4.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "7.4.3"
+  }
+}
