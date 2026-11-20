@@ -7,6 +7,7 @@
 - Migration versions are append-only. Never edit a migration that may already have shipped; add the next numbered migration instead.
 - `products.ts` creates products and barcode records in one transaction.
 - `stock.ts` records stock movements and balance changes in one transaction.
+- `stock-counts.ts` completes physical stock counts, stores expected/counted/variance snapshots, applies only non-zero adjustments, and writes movement and audit history atomically. Migration 006 adds append-only count records.
 - `sales.ts` creates confirmed invoices, immutable line snapshots, initial partial/full collections, stock deductions, stock movement history, and audit events in one transaction. It selects expiring batches first when expiry dates are available.
 - `payments.ts` records later customer debt collections, updates the invoice collected balance, and writes payment history and audit events in one transaction. It refuses overpayment and does not rewrite legacy invoices without a confirmed new-format timestamp.
 - `customers.ts` creates and searches the customer directory; customer debt is calculated from invoice balances rather than maintained as a separately mutable total. Legacy invoice debt is read from its preserved legacy balance field.
