@@ -176,9 +176,11 @@ export default function App() {
       const db=await openAppDatabase();
       const loaded=await db.query("SELECT id FROM stock_movements WHERE reference_type='sales_order_load' AND reference_id=? LIMIT 1",[order.id]);
       if(!loaded.values?.length)throw new Error('خاصك تحمّل الطلب للسيارة قبل تأكيد التسليم.');
-      const location=await db.query("SELECT id FROM stock_locations WHERE vehicle_id=? AND location_type='vehicle' AND is_active=1",[order.assigned_vehicle_id]);
+      const location=await db.query("SELECT sl.id,v.assigned_user_id FROM stock_locations sl JOIN vehicles v ON v.id=sl.vehicle_id WHERE v.id=? AND v.vehicle_type='delivery' AND sl.location_type='vehicle' AND sl.is_active=1",[order.assigned_vehicle_id]);
       const locationId=location.values?.[0]?.id;
-      if(!locationId)throw new Error('مخزون السيارة غير موجود.');
+      const driverId=location.values?.[0]?.assigned_user_id;
+      if(!locationId)throw new Error('مخزون سيارة التوصيل غير موجود.');
+      if(!driverId)throw new Error('خاص تعيّن السائق المسؤول على السيارة قبل التسليم.');
       const orderInfo=await db.query('SELECT o.customer_id,v.assigned_user_id,u.role FROM sales_orders o JOIN vehicles v ON v.id=o.assigned_vehicle_id LEFT JOIN users u ON u.id=v.assigned_user_id WHERE o.id=?',[order.id]);
       const customerId=orderInfo.values?.[0]?.customer_id;
       const driverId=orderInfo.values?.[0]?.assigned_user_id;
@@ -199,7 +201,7 @@ export default function App() {
       await db.beginTransaction();
       try{
         await db.run("UPDATE sales_orders SET status='delivered',updated_at=? WHERE id=? AND status='ready'",[now,order.id]);
-        await db.run("INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)",[crypto.randomUUID(),'local-owner','order.delivered','sales_order',order.id,JSON.stringify({invoiceId:result.invoiceId,invoiceNumber:result.invoiceNumber}),now]);
+        await db.run("INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)",[crypto.randomUUID(),String(driverId),'order.delivered','sales_order',order.id,JSON.stringify({invoiceId:result.invoiceId,invoiceNumber:result.invoiceNumber}),now]);
         await db.commitTransaction();
       }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
       await refreshDistributionOrders(db);
