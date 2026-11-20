@@ -50,7 +50,7 @@ export function canPerform(role: AppRole | null | undefined, permission: AppPerm
   return permissions[role]?.includes(permission) ?? false;
 }
 
-/** Motorcycle deliveries are cashless; only delivery vans may collect delivery payments. */
-export function canCollectDeliveryCash(vehicleType: 'delivery' | 'motorcycle' | null | undefined): boolean {
+/** Delivery cash collection is available only for a configured delivery vehicle. */
+export function canCollectDeliveryCash(vehicleType: 'delivery' | null | undefined): boolean {
   return vehicleType === 'delivery';
 }
