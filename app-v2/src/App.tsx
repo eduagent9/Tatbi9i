@@ -662,7 +662,7 @@ export default function App() {
             <button className="primary-button" disabled={saving||customers.length===0||products.length===0}>إرسال الطلب للديبو</button>
           </form>
           <div className="section-divider"></div><h4>طلباتي</h4>
-          {distributionOrders.filter(order=>order.created_by_user_id===currentUser.id).length===0?<p className="hint">مازال ما سجلتي حتى طلب.</p>:distributionOrders.filter(order=>order.created_by_name===currentUser.display_name).map(order=><article className="team-row" key={order.id}><div><strong>{order.order_number} · {order.customer_name}</strong><span>{order.vehicle_label||'السيارة لم تحدد بعد'} · {formatMad(order.total_minor)}</span><span>الحالة: {({draft:'مسودة',submitted:'مرسل للديبو',accepted:'مقبول',preparing:'قيد التحضير',ready:'جاهز',partially_delivered:'تسليم جزئي',delivered:'تم التسليم',cancelled:'ملغى'} as Record<string,string>)[order.status]}</span></div></article>)}
+          {distributionOrders.filter(order=>order.created_by_user_id===currentUser.id).length===0?<p className="hint">مازال ما سجلتي حتى طلب.</p>:distributionOrders.filter(order=>order.created_by_user_id===currentUser.id).map(order=><article className="team-row" key={order.id}><div><strong>{order.order_number} · {order.customer_name}</strong><span>{order.vehicle_label||'السيارة لم تحدد بعد'} · {formatMad(order.total_minor)}</span><span>الحالة: {({draft:'مسودة',submitted:'مرسل للديبو',accepted:'مقبول',preparing:'قيد التحضير',ready:'جاهز',partially_delivered:'تسليم جزئي',delivered:'تم التسليم',cancelled:'ملغى'} as Record<string,string>)[order.status]}</span></div></article>)}
         </section>
       </div>}
       {currentUser?.role==='depot_manager'&&repository&&<div className="content-grid">
@@ -674,6 +674,24 @@ export default function App() {
 
         <section className="panel team-panel"><div className="panel-heading"><div><h3>استلام ومطابقة النقدية</h3><p>راجع الجلسات اللي تسلمات للديبو وسجل المبلغ المعدود فعلياً</p></div></div>
           {cashSessions.filter(session=>session.status==='submitted').length===0?<p className="hint">ما كايناش عهد نقدية كتسنى المطابقة.</p>:cashSessions.filter(session=>session.status==='submitted').map(session=><article className="team-row" key={session.id}><div><strong>{session.user_name} · {session.vehicle_label||'بدون سيارة'}</strong><span>المفروض: {formatMad(session.expected_cash_minor)} · تسلم: {formatMad(session.handed_cash_minor)}</span><label>المبلغ المعدود (DH)<input type="number" min="0" step="0.01" value={cashCountedAmounts[session.id]??''} onChange={e=>setCashCountedAmounts(current=>({...current,[session.id]:e.target.value}))}/></label><label>سبب الفرق إذا وجد<input value={cashDiscrepancyReasons[session.id]??''} onChange={e=>setCashDiscrepancyReasons(current=>({...current,[session.id]:e.target.value}))}/></label><button type="button" className="secondary-button" disabled={saving} onClick={()=>reconcileCashSession(session)}>تأكيد المطابقة</button></div></article>)}
+        </section>
+
+        <section className="panel sales-panel"><div className="panel-heading"><div><h3>بيع من المستودع</h3><p>بيع مباشر من مخزون الديبو مع أداء جزئي أو آجل</p></div></div>
+          <form onSubmit={submitSale}>
+            <label>الزبون<select required value={saleCustomerId} onChange={e=>setSaleCustomerId(e.target.value)}><option value="">اختار الزبون</option>{customers.map(customer=><option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
+            {saleLines.map((line,index)=><div className="sale-line" key={index}><label>المنتج<select required value={line.productId} onChange={e=>setSaleLines(current=>current.map((item,i)=>i===index?{...item,productId:e.target.value}:item))}><option value="">اختار المنتج</option>{products.map(product=><option key={product.id} value={product.id}>{product.name} · {formatMad(product.sale_price_minor)}</option>)}</select></label><label>الكمية<input type="number" min="0.01" step="0.01" required value={line.quantity} onChange={e=>setSaleLines(current=>current.map((item,i)=>i===index?{...item,quantity:e.target.value}:item))}/></label><button type="button" className="remove-line" disabled={saleLines.length===1} onClick={()=>setSaleLines(current=>current.filter((_,i)=>i!==index))}>حذف السطر</button></div>)}
+            <button type="button" className="secondary-button" onClick={()=>setSaleLines(current=>[...current,{productId:'',quantity:'1'}])}>+ إضافة منتج</button>
+            <label>التخفيض (DH)<input type="number" min="0" step="0.01" value={saleDiscount} onChange={e=>setSaleDiscount(e.target.value)}/></label>
+            <label>المبلغ المؤدى دابا (DH)<input type="number" min="0" step="0.01" value={saleCollected} onChange={e=>setSaleCollected(e.target.value)}/></label>
+            <button className="primary-button" disabled={saving||customers.length===0||products.length===0}>تأكيد البيع من المستودع</button>
+          </form>
+        </section>
+        <section className="panel collection-panel"><div className="panel-heading"><div><h3>تحصيل ديون الزبناء</h3><p>تسجيل أداء لاحق على فاتورة سابقة</p></div></div>
+          <form onSubmit={submitCollection}>
+            <label>الفاتورة المستحقة<select required value={collectionInvoiceId} onChange={e=>setCollectionInvoiceId(e.target.value)}><option value="">اختار الفاتورة</option>{outstandingInvoices.map(invoice=><option key={invoice.invoiceId} value={invoice.invoiceId}>{invoice.invoiceNumber} · {invoice.customerName} · باقي {formatMad(invoice.dueMinor)}</option>)}</select></label>
+            <label>المبلغ المستخلص (DH)<input type="number" min="0.01" step="0.01" required value={collectionAmount} onChange={e=>setCollectionAmount(e.target.value)}/></label>
+            <button className="primary-button" disabled={saving||outstandingInvoices.length===0}>تأكيد تحصيل الدين</button>
+          </form>
         </section>
         <section className="panel stock-panel"><div className="panel-heading"><div><h3>المخزون والتنبيهات</h3><p>مراقبة المنتجات والكميات المنخفضة</p></div></div>
           {products.length===0?<p className="hint">مازال ما تسجلوش المنتجات.</p>:products.map(product=><article className="alert-row" key={product.id}><div><strong>{product.name}</strong><span>حد التنبيه: {product.low_stock_threshold}</span></div><strong>{product.total_stock} متوفر</strong></article>)}
@@ -693,6 +711,13 @@ export default function App() {
         </section>
         <section className="panel team-panel"><div className="panel-heading"><div><h3>عهدة النقدية ديالي</h3><p>المبالغ النقدية المسجلة من مبيعات السيارة</p></div></div>
           {cashSessions.filter(session=>session.user_id===currentUser.id).length===0?<p className="hint">مازال ما تسجلات حتى عملية نقدية.</p>:cashSessions.filter(session=>session.user_id===currentUser.id).map(session=><article className="team-row" key={session.id}><div><strong>{session.vehicle_label||'سيارة البيع'}</strong><span>المتوقع: {formatMad(session.expected_cash_minor)} · المسلم: {formatMad(session.handed_cash_minor)} · الباقي: {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</span><span>الحالة: {session.status==='open'?'مفتوحة':session.status==='submitted'?'تسلمات للديبو':'تمت المطابقة'}</span></div></article>)}
+          <div className="section-divider"></div><h4>تسليم النقدية للديبو</h4>
+          <form onSubmit={submitCashHandover}>
+            <label>جلسة التحصيل<select required value={handoverSessionId} onChange={e=>setHandoverSessionId(e.target.value)}><option value="">اختار عهدتك المفتوحة</option>{cashSessions.filter(session=>session.status==='open'&&session.user_id===currentUser.id).map(session=><option key={session.id} value={session.id}>{session.vehicle_label||'السيارة'} · باقي {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</option>)}</select></label>
+            <label>المستلم فالديبو<select required value={handoverReceiverId} onChange={e=>setHandoverReceiverId(e.target.value)}><option value="">اختار المستلم</option>{teamUsers.filter(user=>user.is_active===1&&(user.role==='owner'||user.role==='depot_manager')).map(user=><option key={user.id} value={user.id}>{user.display_name} · {roleLabels[user.role]}</option>)}</select></label>
+            <label>المبلغ المسلم (DH)<input required type="number" min="0.01" step="0.01" value={handoverAmount} onChange={e=>setHandoverAmount(e.target.value)}/></label>
+            <button className="primary-button" disabled={saving||cashSessions.every(session=>session.status!=='open'||session.user_id!==currentUser.id)}>تأكيد التسليم وإصدار الوصل</button>
+          </form>
         </section>
       </div>}
       {currentUser?.role==='delivery_driver'&&repository&&<div className="content-grid">
