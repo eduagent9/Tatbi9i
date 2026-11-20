@@ -63,6 +63,18 @@ jobs:
           const todayIso = [today.getFullYear(), String(today.getMonth()+1).padStart(2,'0'), String(today.getDate()).padStart(2,'0')].join('-');
           if (expiry(todayIso) !== 0) throw new Error('Expiry calculation failed for today');
           if (context.reportMonth('20/11/2026, 10:30:00') !== '2026-11' || context.reportMonth('2026-04-15') !== '2026-04' || context.reportMonth('2026-04') !== '2026-04' || context.reportMonth('2026-02-31') !== '' || context.reportMonth('2026-13-01') !== '' || context.reportMonth('31/02/2026') !== '' || context.reportMonth('unknown') !== '') throw new Error('Monthly report date parsing failed');
+          vm.runInContext(extractFunction(scripts[0][1], 'cartTotals'), context);
+          context.document = { getElementById: id => ({ value: id === 'saleDiscountType' ? 'percent' : '10' }) };
+          context.cart = [{id:'p3',qty:2}];
+          context.db = {products:[{id:'p3',price:50,qty:5}]};
+          let totals = context.cartTotals();
+          if (!totals.valid || totals.subtotal !== 100 || totals.discount !== 10 || totals.total !== 90) throw new Error('Percentage discount calculation failed');
+          context.document = { getElementById: id => ({ value: id === 'saleDiscountType' ? 'percent' : '101' }) };
+          if (context.cartTotals().valid) throw new Error('Discount above 100 percent was accepted');
+          context.document = { getElementById: id => ({ value: id === 'saleDiscountType' ? 'amount' : '101' }) };
+          if (context.cartTotals().valid) throw new Error('Fixed discount above subtotal was accepted');
+          context.document = { getElementById: id => ({ value: id === 'saleDiscountType' ? 'amount' : '-1' }) };
+          if (context.cartTotals().valid) throw new Error('Negative discount was accepted');
           vm.runInContext(extractFunction(scripts[0][1], 'cartQty'), context);
           context.renderCart = () => {};
           context.toast = message => { context.lastToast = message; };
@@ -81,7 +93,7 @@ jobs:
           if (context.cart[0].qty !== 2) throw new Error('Cart quantity increment failed');
           context.cartQty('p2',-1);
           if (context.cart[0].qty !== 1) throw new Error('Cart quantity decrement failed');
-          console.log('Business logic checks passed: expiry dates, monthly date parsing, and POS cart quantity boundaries.');
+          console.log('Business logic checks passed: expiry dates, monthly date parsing, POS cart quantities, and discount boundaries.');
           console.log('Static checks passed: JavaScript syntax, unique HTML IDs, core workflows.');
           NODE
       - name: Configure Pages
