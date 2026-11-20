@@ -1,0 +1,104 @@
+:root {
+  font-family: Tahoma, Arial, sans-serif;
+  color: #172b3a;
+  background: #f2f5f8;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+button, input { font: inherit; }
+
+.app-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+  background:
+    radial-gradient(circle at 12% 8%, rgba(37, 133, 151, .13), transparent 32rem),
+    linear-gradient(145deg, #f7f9fb, #eaf0f5);
+}
+
+.welcome-card {
+  width: min(100%, 520px);
+  padding: 36px 28px;
+  border: 1px solid #dce5eb;
+  border-radius: 26px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 24px 70px rgba(19, 48, 67, .10);
+  text-align: center;
+}
+
+.brand-mark {
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 22px;
+  border-radius: 20px;
+  color: white;
+  background: #173e55;
+  font-size: 32px;
+  font-weight: 800;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: #607887;
+  font-size: 13px;
+}
+
+h1 {
+  margin: 0;
+  color: #173e55;
+  font-size: clamp(32px, 8vw, 44px);
+}
+
+.intro {
+  max-width: 360px;
+  margin: 16px auto 24px;
+  color: #536875;
+  line-height: 1.9;
+}
+
+.status-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  color: #315c4a;
+  background: #edf7f1;
+  font-size: 13px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3b9b69;
+}
+
+footer {
+  position: fixed;
+  inset-inline: 12px;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  color: #7a8b95;
+  text-align: center;
+  font-size: 11px;
+}
+
+@media (max-width: 420px) {
+  .welcome-card { padding: 30px 20px; }
+}
