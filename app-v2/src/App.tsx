@@ -5,6 +5,7 @@ import { ProductRepository, type ProductRecord } from './data/products';
 import { StockRepository } from './data/stock';
 import { CustomerRepository, type CustomerRecord } from './data/customers';
 import { SalesRepository } from './data/sales';
+import { PaymentRepository, type OutstandingInvoice } from './data/payments';
 
 const emptyForm = { name: '', category: 'مواد غذائية', subcategory: '', unit: 'piece' as 'piece' | 'carton', pieces: '12', cost: '', price: '', threshold: '0', barcode: '' };
 
@@ -12,6 +13,9 @@ export default function App() {
   const [repository, setRepository] = useState<ProductRepository | null>(null);
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
+  const [outstandingInvoices, setOutstandingInvoices] = useState<OutstandingInvoice[]>([]);
+  const [collectionInvoiceId, setCollectionInvoiceId] = useState('');
+  const [collectionAmount, setCollectionAmount] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerCity, setCustomerCity] = useState('');
@@ -40,6 +44,7 @@ export default function App() {
       setRepository(repo);
       await refresh(repo);
       setCustomers(await new CustomerRepository(db).list());
+      setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
     }).catch(reason => { if (alive) setError(reason instanceof Error ? reason.message : 'تعذر فتح قاعدة البيانات.'); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -84,6 +89,25 @@ export default function App() {
     finally { setSaving(false); }
   }
 
+  async function submitCollection(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!collectionInvoiceId) { setError('اختار الفاتورة أولاً.'); return; }
+    setError(''); setNotice(''); setSaving(true);
+    try {
+      const db = await openAppDatabase();
+      const result = await new PaymentRepository(db).collect({
+        id: crypto.randomUUID(), invoiceId: collectionInvoiceId,
+        amountMinor: madToMinorUnits(Number(collectionAmount)),
+        method: 'cash', receivedBy: 'local-owner',
+      });
+      setCustomers(await new CustomerRepository(db).list());
+      setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
+      setCollectionAmount('');
+      setNotice('تسجل التسديد. الدين المتبقي فالفاتورة: ' + formatMad(result.dueMinor));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر تسجيل التسديد.'); }
+    finally { setSaving(false); }
+  }
+
   async function submitSale(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!saleCustomerId || !saleProductId) { setError('اختار الزبون والمنتج أولاً.'); return; }
@@ -102,6 +126,7 @@ export default function App() {
       const repo = repository ?? new ProductRepository(db);
       await refresh(repo);
       setCustomers(await new CustomerRepository(db).list());
+      setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
       setSaleQuantity('1'); setSaleDiscount('0'); setSaleCollected('');
       setNotice('تسجلات الفاتورة ' + result.invoiceNumber + ' بنجاح. المتبقي على الزبون: ' + formatMad(result.dueMinor));
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر تسجيل الفاتورة.'); }
@@ -162,6 +187,14 @@ export default function App() {
             <button className="primary-button" disabled={saving}>{saving ? 'كيتم الحفظ...' : 'إضافة الزبون'}</button>
           </form>
           <div className="customer-list">{customers.length === 0 ? <p className="hint">مازال ما تسجل حتى زبون.</p> : customers.map(customer => <article className="customer-row" key={customer.id}><div><strong>{customer.name}</strong><span>{customer.phone || customer.city || 'بدون معلومات إضافية'}</span></div><div><strong>{formatMad(customer.debt_minor)}</strong><span>الدين · {customer.invoice_count} فاتورة</span></div></article>)}</div>
+        </section>
+        <section className="panel collection-panel"><div className="panel-heading"><div><h3>تحصيل الديون</h3><p>تسجيل أداء لاحق على فاتورة سابقة</p></div><span className="step-mark">06</span></div>
+          <form onSubmit={submitCollection}>
+            <label>الفاتورة المستحقة<select required value={collectionInvoiceId} onChange={e => setCollectionInvoiceId(e.target.value)}><option value="">اختار الفاتورة</option>{outstandingInvoices.map(invoice => <option key={invoice.invoiceId} value={invoice.invoiceId}>{invoice.invoiceNumber} · {invoice.customerName} · باقي {formatMad(invoice.dueMinor)}</option>)}</select></label>
+            <label>المبلغ المستخلص (DH)<input type="number" min="0.01" step="0.01" required value={collectionAmount} onChange={e => setCollectionAmount(e.target.value)} placeholder="0.00" /></label>
+            <button className="primary-button" disabled={saving || outstandingInvoices.length === 0}>{saving ? 'كيتسجل الأداء...' : 'تأكيد تحصيل الدين'}</button>
+          </form>
+          {outstandingInvoices.length === 0 ? <p className="hint">ما كايناش فواتير جديدة فيها دين مستحق.</p> : <p className="hint">الفواتير القديمة غير المؤكدة ما كتدخلش فهاد اللائحة. ما يمكنش تحصيل مبلغ أكبر من الدين المتبقي.</p>}
         </section>
         <section className="panel sales-panel"><div className="panel-heading"><div><h3>فاتورة بيع جديدة</h3><p>بيع منتج واحد حالياً مع تخفيض وأداء جزئي</p></div><span className="step-mark">05</span></div>
           <form onSubmit={submitSale}>
