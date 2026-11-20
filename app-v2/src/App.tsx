@@ -38,8 +38,7 @@ export default function App() {
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerCity, setCustomerCity] = useState('');
   const [saleCustomerId, setSaleCustomerId] = useState('');
-  const [saleProductId, setSaleProductId] = useState('');
-  const [saleQuantity, setSaleQuantity] = useState('1');
+  const [saleLines, setSaleLines] = useState<Array<{productId:string;quantity:string}>>([{productId:'',quantity:'1'}]);
   const [saleDiscount, setSaleDiscount] = useState('0');
   const [saleCollected, setSaleCollected] = useState('');
   const [form, setForm] = useState(emptyForm);
@@ -188,17 +187,16 @@ export default function App() {
 
   async function submitSale(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!saleCustomerId || !saleProductId) { setError('اختار الزبون والمنتج أولاً.'); return; }
+    if (!saleCustomerId || saleLines.length===0 || saleLines.some(line=>!line.productId||!Number.isFinite(Number(line.quantity))||Number(line.quantity)<=0)) { setError('اختار الزبون والمنتجات وتأكد من الكميات.'); return; }
     setError(''); setNotice(''); setSaving(true);
     try {
       const db = await openAppDatabase();
-      const quantity = Number(saleQuantity);
       const discountMinor = madToMinorUnits(Number(saleDiscount || 0));
       const collectedMinor = madToMinorUnits(Number(saleCollected || 0));
       const result = await new SalesRepository(db).create({
         id: crypto.randomUUID(), invoiceNumber: 'T-' + Date.now(),
         customerId: saleCustomerId, sellerUserId: 'local-owner', locationId: 'loc-depot-main',
-        lines: [{ productId: saleProductId, quantity }],
+        lines: saleLines.map(line=>({productId:line.productId,quantity:Number(line.quantity)})),
         discountMinor, collectedMinor, paymentMethod: 'cash',
       });
       const repo = repository ?? new ProductRepository(db);
@@ -208,7 +206,7 @@ export default function App() {
       setSuppliers(await new SupplierRepository(db).list());
       setExpiryAlerts(await new StockRepository(db).getExpiryAlerts());
       setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
-      setSaleQuantity('1'); setSaleDiscount('0'); setSaleCollected('');
+      setSaleLines([{productId:'',quantity:'1'}]); setSaleDiscount('0'); setSaleCollected('');
       setNotice('تسجلات الفاتورة ' + result.invoiceNumber + ' بنجاح. المتبقي على الزبون: ' + formatMad(result.dueMinor));
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر تسجيل الفاتورة.'); }
     finally { setSaving(false); }
@@ -327,15 +325,20 @@ export default function App() {
           </form>
           {outstandingInvoices.length === 0 ? <p className="hint">ما كايناش فواتير جديدة فيها دين مستحق.</p> : <p className="hint">الفواتير القديمة غير المؤكدة ما كتدخلش فهاد اللائحة. ما يمكنش تحصيل مبلغ أكبر من الدين المتبقي.</p>}
         </section>
-        <section className="panel sales-panel"><div className="panel-heading"><div><h3>فاتورة بيع جديدة</h3><p>بيع منتج واحد حالياً مع تخفيض وأداء جزئي</p></div><span className="step-mark">05</span></div>
+        <section className="panel sales-panel"><div className="panel-heading"><div><h3>فاتورة بيع جديدة</h3><p>فاتورة متعددة المنتجات مع تخفيض وأداء جزئي</p></div><span className="step-mark">05</span></div>
           <form onSubmit={submitSale}>
             <label>الزبون<select required value={saleCustomerId} onChange={e => setSaleCustomerId(e.target.value)}><option value="">اختار الزبون</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
-            <label>المنتج<select required value={saleProductId} onChange={e => setSaleProductId(e.target.value)}><option value="">اختار المنتج</option>{products.map(product => <option key={product.id} value={product.id}>{product.name} · {formatMad(product.sale_price_minor)}</option>)}</select></label>
-            <div className="two-cols"><label>الكمية<input type="number" min="0.01" step="0.01" required value={saleQuantity} onChange={e => setSaleQuantity(e.target.value)} /></label><label>التخفيض (DH)<input type="number" min="0" step="0.01" value={saleDiscount} onChange={e => setSaleDiscount(e.target.value)} /></label></div>
+            {saleLines.map((line,index)=><div className="sale-line" key={index}>
+              <label>المنتج<select required value={line.productId} onChange={e=>setSaleLines(current=>current.map((item,i)=>i===index?{...item,productId:e.target.value}:item))}><option value="">اختار المنتج</option>{products.map(product=><option key={product.id} value={product.id}>{product.name} · {formatMad(product.sale_price_minor)}</option>)}</select></label>
+              <label>الكمية<input type="number" min="0.01" step="0.01" required value={line.quantity} onChange={e=>setSaleLines(current=>current.map((item,i)=>i===index?{...item,quantity:e.target.value}:item))} /></label>
+              <button type="button" className="remove-line" disabled={saleLines.length===1} onClick={()=>setSaleLines(current=>current.filter((_,i)=>i!==index))}>حذف السطر</button>
+            </div>)}
+            <button type="button" className="secondary-button" onClick={()=>setSaleLines(current=>[...current,{productId:'',quantity:'1'}])}>+ إضافة منتج للفاتورة</button>
+            <label>التخفيض (DH)<input type="number" min="0" step="0.01" value={saleDiscount} onChange={e => setSaleDiscount(e.target.value)} /></label>
             <label>المبلغ المؤدى دابا (DH)<input type="number" min="0" step="0.01" value={saleCollected} onChange={e => setSaleCollected(e.target.value)} placeholder="0.00 إذا البيع بالدين" /></label>
-            <button className="primary-button" disabled={saving || products.length === 0 || customers.length === 0}>{saving ? 'كتتسجل الفاتورة...' : 'تأكيد البيع وخصم المخزون'}</button>
+            <button className="primary-button" disabled={saving || products.length === 0 || customers.length === 0 || saleLines.length===0}>{saving ? 'كتتسجل الفاتورة...' : 'تأكيد البيع وخصم المخزون'}</button>
           </form>
-          <p className="hint">الفاتورة كتتسجل مع تفاصيل الثمن والتكلفة، وكتنقص الكمية من المستودع. البيع كيرفض إلا ما كانش المخزون كافي.</p>
+          <p className="hint">الفاتورة كتجمع عدة منتجات، وكتتسجل تفاصيل الثمن والتكلفة وكتنقص الكميات من المستودع. البيع كيرفض إلا ما كانش المخزون كافي.</p>
         </section>
       </div>}
       <footer>تطبيقي · بيانات التطوير محلية على الجهاز · لا تستعملها للمحاسبة الفعلية بعد</footer>
