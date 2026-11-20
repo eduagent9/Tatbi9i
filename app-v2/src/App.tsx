@@ -179,6 +179,7 @@ export default function App() {
       });
       setCustomers(await new CustomerRepository(db).list());
       setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
+      setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
       setCollectionAmount('');
       setNotice('تسجل التسديد. الدين المتبقي فالفاتورة: ' + formatMad(result.dueMinor));
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر تسجيل التسديد.'); }
@@ -206,6 +207,7 @@ export default function App() {
       setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
       setSuppliers(await new SupplierRepository(db).list());
       setExpiryAlerts(await new StockRepository(db).getExpiryAlerts());
+      setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
       setSaleQuantity('1'); setSaleDiscount('0'); setSaleCollected('');
       setNotice('تسجلات الفاتورة ' + result.invoiceNumber + ' بنجاح. المتبقي على الزبون: ' + formatMad(result.dueMinor));
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر تسجيل الفاتورة.'); }
