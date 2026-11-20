@@ -1,16 +1,10 @@
-name: Build Android APK
+name: Build Tatbiqi Android APK
 
 on:
   workflow_dispatch:
   push:
     paths:
-      - 'index.html'
-      - 'manifest.webmanifest'
-      - 'sw.js'
-      - 'icon.svg'
-      - 'package.json'
-      - 'capacitor.config.json'
-      - 'scripts/**'
+      - 'app-v2/**'
       - '.github/workflows/android.yml'
 
 permissions:
@@ -19,25 +13,32 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app-v2
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app-v2/package.json
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
-      - name: Install Capacitor
+      - name: Install dependencies
         run: npm install
-      - name: Prepare web assets
-        run: npm run android:prepare
+      - name: Run tests
+        run: npm test
+      - name: Type-check and build web app
+        run: npm run build
       - name: Generate Android project
         run: npx cap add android
-      - name: Sync Android project
+      - name: Sync Capacitor plugins and assets
         run: npx cap sync android
       - name: Build debug APK
         run: |
@@ -48,6 +49,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tatbiqi-android-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: app-v2/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
