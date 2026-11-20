@@ -177,9 +177,7 @@ export default function App() {
       if(!loaded.values?.length)throw new Error('خاصك تحمّل الطلب للسيارة قبل تأكيد التسليم.');
       const location=await db.query("SELECT sl.id,v.assigned_user_id FROM stock_locations sl JOIN vehicles v ON v.id=sl.vehicle_id WHERE v.id=? AND v.vehicle_type='delivery' AND sl.location_type='vehicle' AND sl.is_active=1",[order.assigned_vehicle_id]);
       const locationId=location.values?.[0]?.id;
-      const driverId=location.values?.[0]?.assigned_user_id;
       if(!locationId)throw new Error('مخزون سيارة التوصيل غير موجود.');
-      if(!driverId)throw new Error('خاص تعيّن السائق المسؤول على السيارة قبل التسليم.');
       const orderInfo=await db.query('SELECT o.customer_id,v.assigned_user_id,u.role FROM sales_orders o JOIN vehicles v ON v.id=o.assigned_vehicle_id LEFT JOIN users u ON u.id=v.assigned_user_id WHERE o.id=?',[order.id]);
       const customerId=orderInfo.values?.[0]?.customer_id;
       const driverId=orderInfo.values?.[0]?.assigned_user_id;
