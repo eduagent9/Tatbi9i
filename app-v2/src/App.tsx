@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { formatMad, formatSignedMad, madToMinorUnits } from './data/money';
 import { hashPin, isValidPin, verifyPin } from './data/auth';
 import { canPerform, type AppPermission } from './data/permissions';
+import { canLoadDistributionOrder, canTransitionDistributionOrder } from './data/distribution-workflow';
 import { openAppDatabase } from './data/sqlite-database';
 import { ProductRepository, type ProductRecord } from './data/products';
 import { StockRepository, type ExpiryAlertRow, type StockMovementRecord } from './data/stock';
@@ -219,6 +220,7 @@ export default function App() {
 
   async function loadOrderToVehicle(order:DistributionOrderRow){
     if(!requirePermission('load_delivery_vehicle'))return;
+    if(!canLoadDistributionOrder(order.status)){setError('ما يمكنش تحميل الطلب حتى يكمل الديبو التحضير ويحوّل حالتو إلى جاهز.');return;}
     if(!order.assigned_vehicle_id){setError('خاص تعيّن سيارة توصيل للطلب قبل التحميل.');return;}
     setError('');setNotice('');setSaving(true);
     try{
@@ -379,8 +381,7 @@ export default function App() {
 
   async function changeOrderStatus(order:DistributionOrderRow,next:DistributionOrderRow['status']){
     if(!requirePermission('prepare_orders'))return;
-    const allowed:Record<DistributionOrderRow['status'],DistributionOrderRow['status'][]>= {draft:['submitted','cancelled'],submitted:['accepted','cancelled'],accepted:['preparing','cancelled'],preparing:['ready','cancelled'],ready:[],partially_delivered:[],delivered:[],cancelled:[]};
-    if(!allowed[order.status].includes(next)){setError('هاد الانتقال ما مسموحش من الحالة الحالية.');return;}
+    if(!canTransitionDistributionOrder(order.status,next)){setError('هاد الانتقال ما مسموحش من الحالة الحالية. خاص الطلب يدوز من مراحل التحضير بالترتيب.');return;}
     setError('');setNotice('');setSaving(true);
     try{
       const db=await openAppDatabase(),now=new Date().toISOString();
