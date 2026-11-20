@@ -86,6 +86,40 @@ export default function App() {
     return () => { alive = false; };
   }, [refresh]);
 
+  async function submitTeamMember(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    const cleanName=teamName.trim();
+    if(!cleanName){setError('اسم المستخدم مطلوب.');return;}
+    setError('');setNotice('');setSaving(true);
+    try{
+      const db=await openAppDatabase(),now=new Date().toISOString(),id=crypto.randomUUID();
+      await db.run('INSERT INTO users (id,display_name,phone,role,is_active,created_at,updated_at) VALUES (?,?,?,?,1,?,?)',[id,cleanName,teamPhone.trim()||null,teamRole,now,now]);
+      const result=await db.query('SELECT id,display_name,phone,role,is_active FROM users ORDER BY display_name');
+      setTeamUsers((result.values??[]) as unknown as TeamUser[]);
+      setTeamName('');setTeamPhone('');
+      setNotice('تسجل عضو الفريق بنجاح.');
+    }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تسجيل عضو الفريق.');}
+    finally{setSaving(false);}
+  }
+
+  async function saveVehicleAssignment(vehicle:TeamVehicle){
+    const userId=assignment[vehicle.id]??vehicle.assigned_user_id??'';
+    if(userId){
+      const user=teamUsers.find(item=>item.id===userId);
+      const expectedRole=vehicle.vehicle_type==='van_sales'?'van_sales':'delivery_driver';
+      if(!user||user.role!==expectedRole){setError(vehicle.vehicle_type==='van_sales'?'السيارة ديال البيع خاصها تتربط بمندوب بيع بالسيارة.':'سيارة التوصيل خاصها تتربط بسائق.');return;}
+    }
+    setError('');setNotice('');setSaving(true);
+    try{
+      const db=await openAppDatabase();
+      await db.run('UPDATE vehicles SET assigned_user_id=?,updated_at=? WHERE id=?',[userId||null,new Date().toISOString(),vehicle.id]);
+      const result=await db.query('SELECT v.id,v.code,v.label,v.vehicle_type,v.assigned_user_id,u.display_name AS assigned_name FROM vehicles v LEFT JOIN users u ON u.id=v.assigned_user_id WHERE v.is_active=1 ORDER BY v.code');
+      setTeamVehicles((result.values??[]) as unknown as TeamVehicle[]);
+      setNotice('تحدّث تعيين السيارة بنجاح.');
+    }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تحديث تعيين السيارة.');}
+    finally{setSaving(false);}
+  }
+
   const visibleProducts = useMemo(() => {
     const term = search.trim().toLocaleLowerCase();
     return products.filter(p => !term || [p.name, p.category, p.subcategory, p.barcode].some(v => v?.toLocaleLowerCase().includes(term)));
