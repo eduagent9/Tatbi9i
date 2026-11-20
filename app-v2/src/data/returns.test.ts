@@ -11,7 +11,7 @@ function dbMock(options:{status?:string;failMovement?:boolean;priorQty?:number}=
    if(sql.includes('FROM invoices'))return{values:[{...invoice,status:options.status??invoice.status,confirmed_at:options.status==='draft'?null:invoice.confirmed_at}]};
    if(sql.includes('FROM invoice_lines'))return{values:[{...line,returned_quantity:options.priorQty??0,returned_value_minor:(options.priorQty??0)*500}]};
    if(sql.includes('FROM product_batches'))return{values:values?.[0]?[{id:String(values[0])}]:[]};
-   if(sql.includes('FROM invoice_line_batch_allocations'))return{values:values?.[1]==='batch1'?[{allocated_quantity:2,returned_quantity:options.priorQty??0}]:[{allocated_quantity:0,returned_quantity:0}]};
+   if(sql.includes('FROM invoice_line_batch_allocations'))return{values:values?.[1]==='batch1'?[{allocation_count:1,allocated_quantity:2,returned_quantity:options.priorQty??0}]:[{allocation_count:0,allocated_quantity:0,returned_quantity:0}]};
    if(sql.includes('FROM stock_balances'))return{values:balance?[balance]:[]};
    return{values:[]};
   }),
@@ -59,6 +59,13 @@ describe('ReturnsRepository',()=>{
   expect(db.rollbackTransaction).toHaveBeenCalledOnce();
  });
 
+ it('supports legacy invoices without batch-allocation history using an unbatched return',async()=>{
+  const{db}=dbMock();
+  const legacyInput={...input,lines:[{...input.lines[0],batchId:null}]};
+  const result=await new ReturnsRepository(db).complete(legacyInput);
+  expect(result.returnedValueMinor).toBe(500);
+  expect(db.run).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO product_return_lines'),expect.arrayContaining([null,500]));
+ });
  it('requires an explicit original batch selection',async()=>{
   const{db}=dbMock();
   await expect(new ReturnsRepository(db).complete({...input,lines:[{id:'rl1',invoiceLineId:'il-1',quantity:1,condition:'sellable'}]})).rejects.toThrow('اختار الدفعة الأصلية');
