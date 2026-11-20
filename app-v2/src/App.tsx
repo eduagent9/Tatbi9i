@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { formatMad, madToMinorUnits } from './data/money';
 import { openAppDatabase } from './data/sqlite-database';
 import { ProductRepository, type ProductRecord } from './data/products';
-import { StockRepository } from './data/stock';
+import { StockRepository, type ExpiryAlertRow } from './data/stock';
 import { CustomerRepository, type CustomerRecord } from './data/customers';
 import { SalesRepository } from './data/sales';
 import { PaymentRepository, type OutstandingInvoice } from './data/payments';
@@ -14,6 +14,7 @@ const emptyForm = { name: '', category: 'مواد غذائية', subcategory: ''
 export default function App() {
   const [repository, setRepository] = useState<ProductRepository | null>(null);
   const [products, setProducts] = useState<ProductRecord[]>([]);
+  const [expiryAlerts, setExpiryAlerts] = useState<ExpiryAlertRow[]>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [outstandingInvoices, setOutstandingInvoices] = useState<OutstandingInvoice[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
@@ -57,6 +58,7 @@ export default function App() {
       setCustomers(await new CustomerRepository(db).list());
       setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
       setSuppliers(await new SupplierRepository(db).list());
+      setExpiryAlerts(await new StockRepository(db).getExpiryAlerts());
     }).catch(reason => { if (alive) setError(reason instanceof Error ? reason.message : 'تعذر فتح قاعدة البيانات.'); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -81,7 +83,7 @@ export default function App() {
         quantity, movementType: stockDirection === 'in' ? 'purchase_receipt' : stockOutType,
         note: stockDirection === 'in' ? 'إدخال للمستودع' : 'إخراج من المستودع',
       });
-      await refresh(repository); setStockQuantity('1'); setNotice('تسجلات حركة المخزون بنجاح.');
+      await refresh(repository); setExpiryAlerts(await new StockRepository(db).getExpiryAlerts()); setStockQuantity('1'); setNotice('تسجلات حركة المخزون بنجاح.');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر تسجيل الحركة.'); }
     finally { setSaving(false); }
   }
@@ -132,6 +134,7 @@ export default function App() {
       const repo = repository ?? new ProductRepository(db);
       await refresh(repo);
       setSuppliers(await new SupplierRepository(db).list());
+      setExpiryAlerts(await new StockRepository(db).getExpiryAlerts());
       setPurchaseQuantity('1'); setPurchaseUnitCost(''); setPurchaseBatch(''); setPurchaseExpiry('');
       setNotice('تسجل وصل الشراء ' + result.receiptNumber + ' بمجموع ' + formatMad(result.totalMinor));
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر تسجيل التوريد.'); }
@@ -177,6 +180,7 @@ export default function App() {
       setCustomers(await new CustomerRepository(db).list());
       setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
       setSuppliers(await new SupplierRepository(db).list());
+      setExpiryAlerts(await new StockRepository(db).getExpiryAlerts());
       setSaleQuantity('1'); setSaleDiscount('0'); setSaleCollected('');
       setNotice('تسجلات الفاتورة ' + result.invoiceNumber + ' بنجاح. المتبقي على الزبون: ' + formatMad(result.dueMinor));
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر تسجيل الفاتورة.'); }
@@ -237,6 +241,20 @@ export default function App() {
             <button className="primary-button" disabled={saving}>{saving ? 'كيتم الحفظ...' : 'إضافة الزبون'}</button>
           </form>
           <div className="customer-list">{customers.length === 0 ? <p className="hint">مازال ما تسجل حتى زبون.</p> : customers.map(customer => <article className="customer-row" key={customer.id}><div><strong>{customer.name}</strong><span>{customer.phone || customer.city || 'بدون معلومات إضافية'}</span></div><div><strong>{formatMad(customer.debt_minor)}</strong><span>الدين · {customer.invoice_count} فاتورة</span></div></article>)}</div>
+        </section>
+        <section className="panel alerts-panel"><div className="panel-heading"><div><h3>تنبيهات المخزون والصلاحية</h3><p>مراقبة النقص والدفعات اللي قربات تسالي</p></div><span className="step-mark">08</span></div>
+          <div className="alert-group"><h4>مخزون منخفض</h4>
+            {products.filter(product => product.low_stock_threshold > 0 && product.total_stock <= product.low_stock_threshold).length === 0
+              ? <p className="hint">ما كاين حتى منتج تحت حد التنبيه.</p>
+              : products.filter(product => product.low_stock_threshold > 0 && product.total_stock <= product.low_stock_threshold).map(product => <article className="alert-row" key={product.id}><div><strong>{product.name}</strong><span>حد التنبيه: {product.low_stock_threshold}</span></div><strong className="alert-value">{product.total_stock} متبقي</strong></article>)}
+          </div>
+          <div className="section-divider"></div>
+          <div className="alert-group"><h4>دفعات بتاريخ الصلاحية</h4>
+            {expiryAlerts.length === 0 ? <p className="hint">ما كايناش دفعات مسجلة بتاريخ صلاحية.</p> : expiryAlerts.map(batch => {
+              const days = Math.ceil((new Date(batch.expiry_date + 'T00:00:00').getTime() - new Date().setHours(0,0,0,0)) / 86400000);
+              return <article className="alert-row" key={batch.batch_id}><div><strong>{batch.product_name}</strong><span>{batch.batch_code || 'بدون رقم دفعة'} · {batch.location_label}</span></div><div className="alert-right"><strong>{batch.quantity}</strong><span className={days < 0 ? 'expired-label' : days <= 30 ? 'soon-label' : ''}>{days < 0 ? 'منتهية الصلاحية' : days === 0 ? 'تنتهي اليوم' : days + ' يوم متبقي'}</span><small>{batch.expiry_date}</small></div></article>;
+            })}
+          </div>
         </section>
         <section className="panel supplier-panel"><div className="panel-heading"><div><h3>الموردون والتوريدات</h3><p>إضافة مورد وتسجيل وصولات الشراء مع الصلاحية</p></div><span className="step-mark">07</span></div>
           <form onSubmit={submitSupplier}>
