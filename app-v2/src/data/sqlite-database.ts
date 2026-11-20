@@ -2,7 +2,6 @@ import { Capacitor } from '@capacitor/core';
 import {
   CapacitorSQLite,
   SQLiteConnection,
-  type SQLiteDBConnection,
 } from '@capacitor-community/sqlite';
 import initialSchema from './migrations/001_initial_schema.sql?raw';
 
