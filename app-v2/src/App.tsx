@@ -667,7 +667,7 @@ export default function App() {
           <div className="section-divider"></div><h4>جلسات التحصيل</h4>
           {cashSessions.length===0?<p className="hint">مازال ما تسجل حتى تحصيل نقدي من عمليات التوصيل.</p>:cashSessions.map(session=><article className="team-row" key={session.id}><div><strong>{session.user_name} · {session.vehicle_label||'بدون سيارة'}</strong><span>المفروض: {formatMad(session.expected_cash_minor)} · تسلم: {formatMad(session.handed_cash_minor)} · باقي: {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</span><span>الحالة: {session.status==='open'?'مفتوحة':session.status==='submitted'?'تسلمات للديبو':'تمت المطابقة'}</span></div></article>)}
         </section>
-      </div>
+      </div>}
       <footer>تطبيقي · بيانات التطوير محلية على الجهاز · لا تستعملها للمحاسبة الفعلية بعد</footer>
     </main>
   );
