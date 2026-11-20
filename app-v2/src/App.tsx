@@ -196,7 +196,6 @@ export default function App() {
         }
         await db.run("INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)",[crypto.randomUUID(),'local-owner','order.loaded_to_vehicle','sales_order',order.id,JSON.stringify({vehicleId:order.assigned_vehicle_id,lines:lines.values.length}),now]);
         await db.commitTransaction();
-      setNotice((nextStatus==='delivered'?'تسلم الطلب كامل. ':'تسجل تسليم جزئي وباقي السلع باقية فالطلب. ')+'الفاتورة '+result.invoiceNumber+'؛ المحصل '+formatMad(result.collectedMinor)+' والباقي على الزبون '+formatMad(result.dueMinor)+'.');
       }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
       await refreshDistributionOrders(db);
       setNotice('تحمّل الطلب '+order.order_number+' فالسيارة بنجاح، والمخزون تنقل من الديبو للسيارة.');
@@ -257,6 +256,7 @@ export default function App() {
         await db.run("UPDATE sales_orders SET status=?,updated_at=? WHERE id=? AND status IN ('ready','partially_delivered')",[nextStatus,now,order.id]);
         await db.run("INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)",[crypto.randomUUID(),String(driverId),nextStatus==='delivered'?'order.delivered':'order.partially_delivered','sales_order',order.id,JSON.stringify({invoiceId:result.invoiceId,invoiceNumber:result.invoiceNumber,lines:selected.map(item=>({lineId:item.line.id,quantity:item.quantity})),pendingLines:Number(remaining.values?.[0]?.pending??0)}),now]);
         await db.commitTransaction();
+      setNotice((nextStatus==='delivered'?'تسلم الطلب كامل. ':'تسجل تسليم جزئي وباقي السلع باقية فالطلب. ')+'الفاتورة '+result.invoiceNumber+'؛ المحصل '+formatMad(result.collectedMinor)+' والباقي على الزبون '+formatMad(result.dueMinor)+'.');
       }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
       await refreshDistributionOrders(db);
       await refreshCashSessions(db);
