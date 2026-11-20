@@ -52,7 +52,7 @@ describe('SalesRepository',()=>{
 
   it('rejects a discount greater than subtotal before opening a transaction',async()=>{
     const {db}=fakeDb();
-    await expect(new SalesRepository(db).create({...base,discountMinor:351})).rejects.toThrow('التخفيض');
+    await expect(new SalesRepository(db).create({...base,discountMinor:1051})).rejects.toThrow('التخفيض');
     expect(db.beginTransaction).not.toHaveBeenCalled();
   });
 
