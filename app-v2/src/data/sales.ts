@@ -83,7 +83,7 @@ export class SalesRepository {
            LEFT JOIN product_batches pb ON pb.id=sb.batch_id
            WHERE sb.product_id=? AND sb.variant_id IS ? AND sb.location_id=? AND sb.quantity>0
            ORDER BY CASE WHEN pb.expiry_date IS NULL THEN 1 ELSE 0 END, pb.expiry_date, sb.updated_at, sb.id`,
-          [line.product.id,line.variantId,locationId,Number(line.product.purchase_cost_minor)],
+          [Number(line.product.purchase_cost_minor),line.product.id,line.variantId,locationId],
         );
         const available = (balances.values ?? []) as unknown as BalanceRow[];
         const totalAvailable = available.reduce((sum,row)=>sum+Number(row.quantity),0);
