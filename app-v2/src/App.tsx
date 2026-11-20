@@ -16,6 +16,7 @@ import { DataBackupPanel } from './operations/DataBackupPanel';
 const emptyForm = { name: '', category: 'مواد غذائية', subcategory: '', unit: 'piece' as 'piece' | 'carton', pieces: '12', cost: '', price: '', threshold: '0', barcode: '' };
 type DistributionOrderRow = { id:string; order_number:string; customer_name:string; created_by_name:string; assigned_vehicle_id:string|null; vehicle_label:string|null; status:'draft'|'submitted'|'accepted'|'preparing'|'ready'|'partially_delivered'|'delivered'|'cancelled'; total_minor:number; created_at:string };
 type DistributionOrderLine = { id:string; product_id:string; product_name_snapshot:string; variant_id:string|null; quantity:number; unit_price_minor:number; remaining_quantity:number };
+type CashSessionRow = { id:string; user_id:string; user_name:string; vehicle_label:string|null; expected_cash_minor:number; handed_cash_minor:number; status:'open'|'submitted'|'reconciled' };
 type TeamUser = { id:string; display_name:string; phone:string|null; role:'owner'|'depot_manager'|'order_rep'|'van_sales'|'delivery_driver'; is_active:number };
 type TeamVehicle = { id:string; code:string; label:string; vehicle_type:'van_sales'|'delivery'; assigned_user_id:string|null; assigned_name:string|null };
 const roleLabels:Record<TeamUser['role'],string>={owner:'المالك',depot_manager:'مسؤول الديبو',order_rep:'مندوب الطلبات',van_sales:'مندوب البيع بالسيارة',delivery_driver:'السائق'};
@@ -28,6 +29,10 @@ export default function App() {
   const [distributionOrders,setDistributionOrders]=useState<DistributionOrderRow[]>([]);
   const [orderDeliveryLines,setOrderDeliveryLines]=useState<Record<string,DistributionOrderLine[]>>({});
   const [deliveryQuantities,setDeliveryQuantities]=useState<Record<string,string>>({});
+  const [cashSessions,setCashSessions]=useState<CashSessionRow[]>([]);
+  const [handoverSessionId,setHandoverSessionId]=useState('');
+  const [handoverReceiverId,setHandoverReceiverId]=useState('');
+  const [handoverAmount,setHandoverAmount]=useState('');
   const [orderCustomerId,setOrderCustomerId]=useState('');
   const [orderCreatorId,setOrderCreatorId]=useState('');
   const [orderVehicleId,setOrderVehicleId]=useState('');
@@ -83,6 +88,7 @@ export default function App() {
       ]);
       setTeamUsers((usersResult.values??[]) as unknown as TeamUser[]);
       await refreshDistributionOrders(db);
+      await refreshCashSessions(db);
       setTeamVehicles((vehiclesResult.values??[]) as unknown as TeamVehicle[]);
       await refresh(repo);
       setCustomers(await new CustomerRepository(db).list());
@@ -114,6 +120,14 @@ export default function App() {
       for(const [orderId,lines] of lineEntries)for(const line of lines){const key=orderId+':'+line.id;next[key]=String(line.remaining_quantity);}
       return next;
     });
+  }
+
+  async function refreshCashSessions(db:Awaited<ReturnType<typeof openAppDatabase>>){
+    const result=await db.query(`SELECT cs.id,cs.user_id,u.display_name AS user_name,v.label AS vehicle_label,cs.expected_cash_minor,
+      COALESCE((SELECT SUM(ch.amount_minor) FROM cash_handovers ch WHERE ch.session_id=cs.id),0) AS handed_cash_minor,cs.status
+      FROM cash_sessions cs JOIN users u ON u.id=cs.user_id LEFT JOIN vehicles v ON v.id=cs.vehicle_id
+      WHERE cs.status IN ('open','submitted') ORDER BY cs.opened_at DESC LIMIT 100`);
+    setCashSessions((result.values??[]) as unknown as CashSessionRow[]);
   }
 
   async function submitDistributionOrder(event:FormEvent<HTMLFormElement>){
@@ -220,11 +234,17 @@ export default function App() {
       const nextStatus=Number(remaining.values?.[0]?.pending??0)===0?'delivered':'partially_delivered';
       await db.beginTransaction();
       try{
+        if(collectedMinor>0){
+          const activeSession=await db.query("SELECT id FROM cash_sessions WHERE user_id=? AND vehicle_id=? AND status='open' ORDER BY opened_at DESC LIMIT 1",[String(driverId),order.assigned_vehicle_id]);
+          if(activeSession.values?.[0])await db.run('UPDATE cash_sessions SET expected_cash_minor=expected_cash_minor+? WHERE id=?',[collectedMinor,activeSession.values[0].id]);
+          else await db.run("INSERT INTO cash_sessions (id,user_id,vehicle_id,opened_at,opening_cash_minor,expected_cash_minor,status) VALUES (?,?,?,?,0,?,'open')",[crypto.randomUUID(),String(driverId),order.assigned_vehicle_id,now,collectedMinor]);
+        }
         await db.run("UPDATE sales_orders SET status=?,updated_at=? WHERE id=? AND status IN ('ready','partially_delivered')",[nextStatus,now,order.id]);
         await db.run("INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)",[crypto.randomUUID(),String(driverId),nextStatus==='delivered'?'order.delivered':'order.partially_delivered','sales_order',order.id,JSON.stringify({invoiceId:result.invoiceId,invoiceNumber:result.invoiceNumber,lines:selected.map(item=>({lineId:item.line.id,quantity:item.quantity})),pendingLines:Number(remaining.values?.[0]?.pending??0)}),now]);
         await db.commitTransaction();
       }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
       await refreshDistributionOrders(db);
+      await refreshCashSessions(db);
       await refresh(repository??new ProductRepository(db));
       setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
       setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
@@ -232,6 +252,32 @@ export default function App() {
       setDeliveryCollectedAmount('0');
       setNotice((nextStatus==='delivered'?'تسلم الطلب كامل. ':'تسجل تسليم جزئي وباقي السلع باقية فالطلب. ')+'الفاتورة '+result.invoiceNumber+'؛ المحصل '+formatMad(result.collectedMinor)+' والباقي على الزبون '+formatMad(result.dueMinor)+'.');
     }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تأكيد تسليم الطلب.');}
+    finally{setSaving(false);}
+  }
+
+  async function submitCashHandover(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    const session=cashSessions.find(item=>item.id===handoverSessionId);
+    const receiver=teamUsers.find(item=>item.id===handoverReceiverId&&item.is_active===1);
+    const amount=madToMinorUnits(Number(handoverAmount));
+    if(!session||session.status!=='open'){setError('اختار جلسة نقدية مفتوحة.');return;}
+    if(!receiver||!['owner','depot_manager'].includes(receiver.role)){setError('المستلم خاصو يكون المالك أو مسؤول الديبو.');return;}
+    const outstanding=Number(session.expected_cash_minor)-Number(session.handed_cash_minor);
+    if(!Number.isSafeInteger(amount)||amount<=0||amount>outstanding){setError('مبلغ التسليم خاصو يكون أكبر من صفر وما يفوتش المبلغ اللي باقي فالعهدة.');return;}
+    setError('');setNotice('');setSaving(true);
+    try{
+      const db=await openAppDatabase(),now=new Date().toISOString(),receipt='REC-'+Date.now();
+      await db.beginTransaction();
+      try{
+        await db.run('INSERT INTO cash_handovers (id,session_id,from_user_id,to_user_id,amount_minor,receipt_number,received_at,note) VALUES (?,?,?,?,?,?,?,?)',[crypto.randomUUID(),session.id,session.user_id,receiver.id,amount,receipt,now,'تسليم نقدية من '+session.user_name]);
+        await db.run("INSERT INTO payments (id,invoice_id,customer_id,amount_minor,method,payment_kind,received_by,received_at,note) VALUES (?,NULL,NULL,?,'cash','cash_handover',?,?,?)",[crypto.randomUUID(),amount,receiver.id,now,'وصل تسليم '+receipt]);
+        const totalHanded=Number(session.handed_cash_minor)+amount;
+        if(totalHanded>=Number(session.expected_cash_minor))await db.run("UPDATE cash_sessions SET status='submitted',closed_at=? WHERE id=? AND status='open'",[now,session.id]);
+        await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),receiver.id,'cash.handed_over','cash_session',session.id,JSON.stringify({receipt,from:session.user_id,to:receiver.id,amountMinor:amount,totalHanded}),now]);
+        await db.commitTransaction();
+      }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
+      await refreshCashSessions(db);setHandoverAmount('');setNotice('تسجل وصل تسليم النقدية '+receipt+' بقيمة '+formatMad(amount)+'.');
+    }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تسجيل تسليم النقدية.');}
     finally{setSaving(false);}
   }
 
@@ -610,7 +656,18 @@ export default function App() {
           </form>
           <p className="hint">الفاتورة كتجمع عدة منتجات، وكتتسجل تفاصيل الثمن والتكلفة وكتنقص الكميات من المستودع. البيع كيرفض إلا ما كانش المخزون كافي.</p>
         </section>
-      </div>}
+        <section className="panel team-panel">
+          <div className="panel-heading"><div><h3>تسليم نقدية المبيعات للديبو</h3><p>تتبع المبالغ اللي جمعها السائق وإصدار وصل عند تسليمها للمالك أو مسؤول الديبو</p></div><span className="step-mark">النقدية</span></div>
+          <form onSubmit={submitCashHandover}>
+            <label>السائق / جلسة التحصيل<select required value={handoverSessionId} onChange={e=>setHandoverSessionId(e.target.value)}><option value="">اختار جلسة مفتوحة</option>{cashSessions.filter(session=>session.status==='open').map(session=><option key={session.id} value={session.id}>{session.user_name} · {session.vehicle_label||'بدون سيارة'} · باقي {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</option>)}</select></label>
+            <label>المستلم فالديبو<select required value={handoverReceiverId} onChange={e=>setHandoverReceiverId(e.target.value)}><option value="">اختار المستلم</option>{teamUsers.filter(user=>user.is_active===1&&(user.role==='owner'||user.role==='depot_manager')).map(user=><option key={user.id} value={user.id}>{user.display_name} · {roleLabels[user.role]}</option>)}</select></label>
+            <label>المبلغ المسلم (DH)<input required type="number" min="0.01" step="0.01" value={handoverAmount} onChange={e=>setHandoverAmount(e.target.value)} /></label>
+            <button className="primary-button" disabled={saving||cashSessions.every(session=>session.status!=='open')||teamUsers.every(user=>user.is_active!==1||(user.role!=='owner'&&user.role!=='depot_manager'))}>تأكيد تسليم النقدية وإصدار الوصل</button>
+          </form>
+          <div className="section-divider"></div><h4>جلسات التحصيل</h4>
+          {cashSessions.length===0?<p className="hint">مازال ما تسجل حتى تحصيل نقدي من عمليات التوصيل.</p>:cashSessions.map(session=><article className="team-row" key={session.id}><div><strong>{session.user_name} · {session.vehicle_label||'بدون سيارة'}</strong><span>المفروض: {formatMad(session.expected_cash_minor)} · تسلم: {formatMad(session.handed_cash_minor)} · باقي: {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</span><span>الحالة: {session.status==='open'?'مفتوحة':session.status==='submitted'?'تسلمات للديبو':'تمت المطابقة'}</span></div></article>)}
+        </section>
+      </div>
       <footer>تطبيقي · بيانات التطوير محلية على الجهاز · لا تستعملها للمحاسبة الفعلية بعد</footer>
     </main>
   );
