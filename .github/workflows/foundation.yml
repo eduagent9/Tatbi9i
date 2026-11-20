@@ -53,7 +53,7 @@ jobs:
           missing = required - tables
           assert not missing, f'Missing schema tables: {sorted(missing)}'
           assert db.execute('PRAGMA foreign_keys').fetchone()[0] == 1
-          depot = db.execute(\"SELECT id, label FROM stock_locations WHERE location_type='depot'\").fetchone()
+          depot = db.execute("SELECT id, label FROM stock_locations WHERE location_type='depot'").fetchone()
           assert depot == ('loc-depot-main', 'المستودع الرئيسي'), f'Unexpected default depot: {depot}'
           print(f'SQLite schema OK: {len(tables)} tables created; default depot seeded; foreign keys enabled')
           PY
