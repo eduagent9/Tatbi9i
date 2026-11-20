@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { formatMad, formatSignedMad, madToMinorUnits } from './data/money';
+import { hashPin, isValidPin, verifyPin } from './data/auth';
 import { openAppDatabase } from './data/sqlite-database';
 import { ProductRepository, type ProductRecord } from './data/products';
 import { StockRepository, type ExpiryAlertRow, type StockMovementRecord } from './data/stock';
@@ -18,6 +19,7 @@ type DistributionOrderRow = { id:string; order_number:string; customer_name:stri
 type DistributionOrderLine = { id:string; product_id:string; product_name_snapshot:string; variant_id:string|null; quantity:number; unit_price_minor:number; remaining_quantity:number };
 type CashSessionRow = { id:string; user_id:string; user_name:string; vehicle_label:string|null; expected_cash_minor:number; handed_cash_minor:number; counted_cash_minor:number|null; discrepancy_reason:string|null; status:'open'|'submitted'|'reconciled' };
 type TeamUser = { id:string; display_name:string; phone:string|null; role:'owner'|'depot_manager'|'order_rep'|'van_sales'|'delivery_driver'; is_active:number };
+type AuthUser = TeamUser & { pin_salt:string|null; pin_hash:string|null };
 type TeamVehicle = { id:string; code:string; label:string; vehicle_type:'van_sales'|'delivery'; assigned_user_id:string|null; assigned_name:string|null };
 const roleLabels:Record<TeamUser['role'],string>={owner:'المالك',depot_manager:'مسؤول الديبو',order_rep:'مندوب الطلبات',van_sales:'مندوب البيع بالسيارة',delivery_driver:'السائق'};
 
@@ -41,6 +43,14 @@ export default function App() {
   const [deliveryCollectedAmount,setDeliveryCollectedAmount]=useState('0');
   const [orderLines,setOrderLines]=useState<Array<{productId:string;quantity:string}>>([{productId:'',quantity:'1'}]);
   const [teamUsers,setTeamUsers]=useState<TeamUser[]>([]);
+  const [authUsers,setAuthUsers]=useState<AuthUser[]>([]);
+  const [currentUser,setCurrentUser]=useState<AuthUser|null>(null);
+  const [authMode,setAuthMode]=useState<'loading'|'setup'|'login'>('loading');
+  const [authUserId,setAuthUserId]=useState('local-owner');
+  const [authPin,setAuthPin]=useState('');
+  const [setupPin,setSetupPin]=useState('');
+  const [setupPinConfirm,setSetupPinConfirm]=useState('');
+  const [teamPin,setTeamPin]=useState('');
   const [teamVehicles,setTeamVehicles]=useState<TeamVehicle[]>([]);
   const [teamName,setTeamName]=useState('');
   const [teamPhone,setTeamPhone]=useState('');
@@ -85,10 +95,15 @@ export default function App() {
       const repo = new ProductRepository(db);
       setRepository(repo);
       const [usersResult,vehiclesResult]=await Promise.all([
-        db.query("SELECT id,display_name,phone,role,is_active FROM users ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'depot_manager' THEN 1 ELSE 2 END,display_name"),
+        db.query("SELECT id,display_name,phone,role,is_active,pin_salt,pin_hash FROM users ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'depot_manager' THEN 1 ELSE 2 END,display_name"),
         db.query("SELECT v.id,v.code,v.label,v.vehicle_type,v.assigned_user_id,u.display_name AS assigned_name FROM vehicles v LEFT JOIN users u ON u.id=v.assigned_user_id WHERE v.is_active=1 ORDER BY v.code")
       ]);
-      setTeamUsers((usersResult.values??[]) as unknown as TeamUser[]);
+      const loadedUsers=(usersResult.values??[]) as unknown as AuthUser[];
+      setTeamUsers(loadedUsers);
+      setAuthUsers(loadedUsers);
+      const owner=loadedUsers.find(user=>user.id==='local-owner');
+      setAuthMode(owner?.pin_hash&&owner?.pin_salt?'login':'setup');
+      setAuthUserId(owner?.id??loadedUsers.find(user=>user.is_active===1&&user.pin_hash&&user.pin_salt)?.id??'local-owner');
       await refreshDistributionOrders(db);
       await refreshCashSessions(db);
       setTeamVehicles((vehiclesResult.values??[]) as unknown as TeamVehicle[]);
