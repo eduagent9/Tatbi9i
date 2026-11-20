@@ -2,10 +2,13 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { openAppDatabase, type SqliteExecutor } from '../data/sqlite-database';
 import { StockCountRepository } from '../data/stock-counts';
 import { ReturnsRepository, type ReturnCondition } from '../data/returns';
+import { StockRepository } from '../data/stock';
 
 type CountRow={product_id:string;product_name:string;variant_id:string|null;variant_name:string|null;batch_id:string|null;batch_code:string|null;expected:number;counted:string};
 type InvoiceOption={id:string;invoice_number:string;customer_name:string;created_at:string};
 type InvoiceLine={id:string;product_id:string;product_name:string;variant_id:string|null;quantity:number;unit_price_minor:number;remaining:number};
+type LocationOption={id:string;label:string};
+type TransferBalance={balance_id:string;product_id:string;product_name:string;variant_id:string|null;variant_name:string|null;batch_id:string|null;batch_code:string|null;location_id:string;location_label:string;quantity:number};
 const owner='local-owner',depot='loc-depot-main';
 const uid=()=>crypto.randomUUID();
 
@@ -19,6 +22,11 @@ export function StockAndReturnsPanel(){
  const [returnCondition,setReturnCondition]=useState<Record<string,ReturnCondition>>({});
  const [countNote,setCountNote]=useState('');
  const [returnReason,setReturnReason]=useState('');
+ const [locations,setLocations]=useState<LocationOption[]>([]);
+ const [transferBalances,setTransferBalances]=useState<TransferBalance[]>([]);
+ const [transferBalanceId,setTransferBalanceId]=useState('');
+ const [transferDestination,setTransferDestination]=useState('');
+ const [transferQuantity,setTransferQuantity]=useState('');
  const [busy,setBusy]=useState(false);
  const [message,setMessage]=useState('');
  const [error,setError]=useState('');
@@ -36,6 +44,19 @@ export function StockAndReturnsPanel(){
   const rows=(result.values??[]) as unknown as Array<Omit<CountRow,'counted'>>;
   setCounts(rows.map(r=>({...r,counted:''})));
  }
+ async function loadTransferOptions(connection:SqliteExecutor){
+  const [loc,bal]=await Promise.all([
+   connection.query('SELECT id,label FROM stock_locations WHERE is_active=1 ORDER BY location_type,label'),
+   connection.query(`SELECT sb.id AS balance_id,sb.product_id,p.name AS product_name,sb.variant_id,v.variant_name,
+    sb.batch_id,pb.batch_code,sb.location_id,sl.label AS location_label,sb.quantity
+    FROM stock_balances sb JOIN products p ON p.id=sb.product_id
+    JOIN stock_locations sl ON sl.id=sb.location_id
+    LEFT JOIN product_variants v ON v.id=sb.variant_id LEFT JOIN product_batches pb ON pb.id=sb.batch_id
+    WHERE sb.quantity>0 AND p.is_active=1 AND sl.is_active=1 ORDER BY p.name,sl.label,pb.expiry_date`)
+  ]);
+  setLocations((loc.values??[]) as unknown as LocationOption[]);
+  setTransferBalances((bal.values??[]) as unknown as TransferBalance[]);
+ }
  async function loadInvoices(connection:SqliteExecutor){
   const result=await connection.query(`SELECT i.id,i.invoice_number,c.name AS customer_name,i.created_at
     FROM invoices i JOIN customers c ON c.id=i.customer_id
@@ -43,7 +64,7 @@ export function StockAndReturnsPanel(){
     ORDER BY i.created_at DESC`);
   setInvoices((result.values??[]) as unknown as InvoiceOption[]);
  }
- useEffect(()=>{let live=true;openAppDatabase().then(async connection=>{if(!live)return;setDb(connection);await Promise.all([loadCounts(connection),loadInvoices(connection)]);})
+ useEffect(()=>{let live=true;openAppDatabase().then(async connection=>{if(!live)return;setDb(connection);await Promise.all([loadCounts(connection),loadInvoices(connection),loadTransferOptions(connection)]);})
   .catch(e=>{if(live)setError(e instanceof Error?e.message:'تعذر تحميل بيانات الجرد والمرتجعات.');});
   return()=>{live=false;};},[]);
  useEffect(()=>{if(!db||!invoiceId){setInvoiceLines([]);return;}let live=true;
@@ -56,6 +77,23 @@ export function StockAndReturnsPanel(){
   return()=>{live=false;};
  },[db,invoiceId]);
 
+ async function submitTransfer(event:FormEvent<HTMLFormElement>){
+  event.preventDefault();if(!db)return;setError('');setMessage('');
+  const source=transferBalances.find(x=>x.balance_id===transferBalanceId);
+  const quantity=Number(transferQuantity);
+  if(!source){setError('اختار رصيداً متوفراً للتحويل.');return;}
+  if(!transferDestination||transferDestination===source.location_id){setError('اختار وجهة مختلفة عن موقع المصدر.');return;}
+  if(!Number.isFinite(quantity)||quantity<=0||quantity>source.quantity){setError('كمية التحويل خاصها تكون أكبر من صفر وما تفوتش الرصيد المتوفر.');return;}
+  setBusy(true);
+  try{
+   await new StockRepository(db).record({id:uid(),productId:source.product_id,variantId:source.variant_id,batchId:source.batch_id,
+    fromLocationId:source.location_id,toLocationId:transferDestination,quantity,movementType:'transfer',performedBy:owner,
+    referenceType:'stock_transfer',referenceId:uid(),note:'تحويل مخزون بين المواقع'});
+   await Promise.all([loadCounts(db),loadTransferOptions(db)]);
+   setTransferQuantity('');setTransferBalanceId('');setTransferDestination('');
+   setMessage('تم تحويل '+quantity+' من '+source.product_name+' من '+source.location_label+' بنجاح.');
+  }catch(e){setError(e instanceof Error?e.message:'تعذر تحويل المخزون.');}finally{setBusy(false);}
+ }
  async function submitCount(event:FormEvent<HTMLFormElement>){
   event.preventDefault();if(!db)return;setError('');setMessage('');
   const lines=counts.filter(x=>x.counted.trim()!=='');
@@ -86,6 +124,17 @@ export function StockAndReturnsPanel(){
  return <section className="panel operations-panel">
   <div className="panel-heading"><div><h3>الجرد والمرتجعات</h3><p>تسوية المخزون وإرجاع السلع من فواتير البيع</p></div><span className="step-mark">12</span></div>
   {error&&<p className="hint" role="alert">{error}</p>}{message&&<p className="hint" role="status">{message}</p>}
+  <div className="section-divider"></div>
+  <h4>تحويل المخزون بين المواقع</h4>
+  <p className="hint">اختار دفعة ورصيد المصدر والوجهة. التحويل كيتسجل كحركة واحدة داخل معاملة، وكيحافظ على رقم الدفعة والصلاحية.</p>
+  <form onSubmit={submitTransfer}>
+   <label>المنتج والدفعة وموقع المصدر<select required value={transferBalanceId} onChange={e=>{setTransferBalanceId(e.target.value);setTransferQuantity('');}}><option value="">اختار الرصيد المتوفر</option>
+    {transferBalances.map(x=><option key={x.balance_id} value={x.balance_id}>{x.product_name}{x.variant_name?' · '+x.variant_name:''}{x.batch_code?' · دفعة '+x.batch_code:''} · '+x.location_label+' · متوفر '+x.quantity}</option>)}
+   </select></label>
+   <div className="two-cols"><label>الوجهة<select required value={transferDestination} onChange={e=>setTransferDestination(e.target.value)}><option value="">اختار الوجهة</option>{locations.filter(x=>x.id!==transferBalances.find(b=>b.balance_id===transferBalanceId)?.location_id).map(x=><option key={x.id} value={x.id}>{x.label}</option>)}</select></label>
+   <label>الكمية<input type="number" min="0.001" step="0.001" max={transferBalances.find(x=>x.balance_id===transferBalanceId)?.quantity??undefined} value={transferQuantity} onChange={e=>setTransferQuantity(e.target.value)} placeholder="0"/></label></div>
+   <button className="primary-button" disabled={busy||!transferBalanceId||!transferDestination||!transferQuantity}>{busy?'كيتم تحويل المخزون...':'تأكيد تحويل المخزون'}</button>
+  </form>
   <div className="section-divider"></div>
   <h4>جرد المستودع الرئيسي</h4>
   <p className="hint">دخل الكمية اللي لقيتي فعلياً. خانات فارغة ما كتدخلش فعملية الجرد؛ كل سطر مؤكد كيتسجل مع الرصيد والفرق وحركة التسوية.</p>
