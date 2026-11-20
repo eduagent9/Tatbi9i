@@ -14,12 +14,21 @@ import { StockAndReturnsPanel } from './operations/StockAndReturnsPanel';
 import { DataBackupPanel } from './operations/DataBackupPanel';
 
 const emptyForm = { name: '', category: 'مواد غذائية', subcategory: '', unit: 'piece' as 'piece' | 'carton', pieces: '12', cost: '', price: '', threshold: '0', barcode: '' };
+type TeamUser = { id:string; display_name:string; phone:string|null; role:'owner'|'depot_manager'|'order_rep'|'van_sales'|'delivery_driver'; is_active:number };
+type TeamVehicle = { id:string; code:string; label:string; vehicle_type:'van_sales'|'delivery'; assigned_user_id:string|null; assigned_name:string|null };
+const roleLabels:Record<TeamUser['role'],string>={owner:'المالك',depot_manager:'مسؤول الديبو',order_rep:'مندوب الطلبات',van_sales:'مندوب البيع بالسيارة',delivery_driver:'السائق'};
 
 export default function App() {
   const [repository, setRepository] = useState<ProductRepository | null>(null);
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [expiryAlerts, setExpiryAlerts] = useState<ExpiryAlertRow[]>([]);
   const [movementHistory, setMovementHistory] = useState<StockMovementRecord[]>([]);
+  const [teamUsers,setTeamUsers]=useState<TeamUser[]>([]);
+  const [teamVehicles,setTeamVehicles]=useState<TeamVehicle[]>([]);
+  const [teamName,setTeamName]=useState('');
+  const [teamPhone,setTeamPhone]=useState('');
+  const [teamRole,setTeamRole]=useState<TeamUser['role']>('order_rep');
+  const [assignment,setAssignment]=useState<Record<string,string>>({});
   const [financialSummary, setFinancialSummary] = useState<FinancialSummary | null>(null);
   const [expenseCategory, setExpenseCategory] = useState('نقل');
   const [expenseAmount, setExpenseAmount] = useState('');
@@ -58,6 +67,12 @@ export default function App() {
       if (!alive) return;
       const repo = new ProductRepository(db);
       setRepository(repo);
+      const [usersResult,vehiclesResult]=await Promise.all([
+        db.query("SELECT id,display_name,phone,role,is_active FROM users ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'depot_manager' THEN 1 ELSE 2 END,display_name"),
+        db.query("SELECT v.id,v.code,v.label,v.vehicle_type,v.assigned_user_id,u.display_name AS assigned_name FROM vehicles v LEFT JOIN users u ON u.id=v.assigned_user_id WHERE v.is_active=1 ORDER BY v.code")
+      ]);
+      setTeamUsers((usersResult.values??[]) as unknown as TeamUser[]);
+      setTeamVehicles((vehiclesResult.values??[]) as unknown as TeamVehicle[]);
       await refresh(repo);
       setCustomers(await new CustomerRepository(db).list());
       setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
