@@ -10,14 +10,12 @@ function fakeDb(options: { failSql?: string } = {}) {
       calls.push(sql);
       if (options.failSql && sql === options.failSql) throw new Error('migration failed');
     }),
-    query: vi.fn(async (sql: string, values?: unknown[]) => {
+    query: vi.fn(async (sql: string) => {
       calls.push(sql);
       if (sql.includes('COALESCE(MAX(version)')) return { values: [{ version }] };
-      if (sql.includes('INSERT INTO schema_migrations')) {
-        version = Number(values?.[0] ?? version);
-      }
       return { values: [] };
     }),
+    run: vi.fn(async (_sql: string, values?: unknown[]) => { version = Number(values?.[0] ?? version); }),
     beginTransaction: vi.fn(async () => { transaction = true; }),
     commitTransaction: vi.fn(async () => { transaction = false; }),
     rollbackTransaction: vi.fn(async () => { transaction = false; }),
