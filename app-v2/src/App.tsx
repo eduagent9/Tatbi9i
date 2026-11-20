@@ -376,6 +376,7 @@ export default function App() {
     const counted=madToMinorUnits(Number(cashCountedAmounts[session.id]??''));
     const difference=counted-Number(session.expected_cash_minor);
     const reason=(cashDiscrepancyReasons[session.id]??'').trim();
+    let reconciledDifference=difference;
     if(!Number.isSafeInteger(counted)||counted<0){setError('دخل المبلغ اللي تعدّ فعلياً فالديبو.');return;}
     if(difference!==0&&!reason){setError('كتب سبب الفرق بين المبلغ المتوقع والمبلغ المعدود.');return;}
     setError('');setNotice('');setSaving(true);
@@ -390,11 +391,12 @@ export default function App() {
         const liveDifference=counted-liveExpected;
         if(!Number.isSafeInteger(liveExpected)||liveExpected<0)throw new Error('المبلغ المتوقع فالعهدة غير صالح وخصو مراجعة.');
         if(liveDifference!==0&&!reason)throw new Error('كتب سبب الفرق بين المبلغ المتوقع الحالي والمبلغ المعدود.');
+        reconciledDifference=liveDifference;
         await db.run("UPDATE cash_sessions SET counted_cash_minor=?,discrepancy_reason=?,status='reconciled' WHERE id=? AND status='submitted'",[counted,reason||null,session.id]);
         await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),currentUser?.id??'local-owner','cash.reconciled','cash_session',session.id,JSON.stringify({expectedMinor:liveExpected,countedMinor:counted,differenceMinor:liveDifference,reason}),now]);
         await db.commitTransaction();
       }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
-      await refreshCashSessions(db);setNotice(difference===0?'تطابقت جلسة النقدية بنجاح.':'تسجلات المطابقة مع فرق '+formatSignedMad(difference)+' وسبب الفرق.');
+      await refreshCashSessions(db);setNotice(reconciledDifference===0?'تطابقت جلسة النقدية بنجاح.':'تسجلات المطابقة مع فرق '+formatSignedMad(reconciledDifference)+' وسبب الفرق.');
     }catch(reason){setError(reason instanceof Error?reason.message:'تعذر إتمام مطابقة النقدية.');}
     finally{setSaving(false);}
   }
@@ -593,6 +595,8 @@ export default function App() {
       if(!vehicle?.location_id)throw new Error('مخزون سيارة البيع غير موجود.');
       await db.beginTransaction();
       try{
+        const liveVehicle=await db.query("SELECT v.id FROM vehicles v JOIN stock_locations sl ON sl.vehicle_id=v.id AND sl.location_type='vehicle' AND sl.is_active=1 WHERE v.id=? AND v.vehicle_type='van_sales' AND v.is_active=1 AND v.assigned_user_id=?",[String(vehicle.id),currentUser!.id]);
+        if(!liveVehicle.values?.length)throw new Error('تعيين سيارة البيع تبدل؛ حدّث بيانات السيارة قبل تسجيل الفاتورة.');
         const result=await new SalesRepository(db).create({
           id:crypto.randomUUID(),invoiceNumber:'TV-'+Date.now(),customerId:saleCustomerId,
           sellerUserId:currentUser!.id,locationId:String(vehicle.location_id),vehicleId:String(vehicle.id),
