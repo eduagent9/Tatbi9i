@@ -16,7 +16,7 @@ import { StockAndReturnsPanel } from './operations/StockAndReturnsPanel';
 import { DataBackupPanel } from './operations/DataBackupPanel';
 
 const emptyForm = { name: '', category: 'مواد غذائية', subcategory: '', unit: 'piece' as 'piece' | 'carton', pieces: '12', cost: '', price: '', threshold: '0', barcode: '' };
-type DistributionOrderRow = { id:string; order_number:string; customer_name:string; created_by_name:string; assigned_vehicle_id:string|null; vehicle_label:string|null; status:'draft'|'submitted'|'accepted'|'preparing'|'ready'|'partially_delivered'|'delivered'|'cancelled'; total_minor:number; created_at:string };
+type DistributionOrderRow = { id:string; order_number:string; customer_name:string; created_by_user_id:string; created_by_name:string; assigned_vehicle_id:string|null; vehicle_label:string|null; status:'draft'|'submitted'|'accepted'|'preparing'|'ready'|'partially_delivered'|'delivered'|'cancelled'; total_minor:number; created_at:string };
 type DistributionOrderLine = { id:string; product_id:string; product_name_snapshot:string; variant_id:string|null; quantity:number; unit_price_minor:number; remaining_quantity:number };
 type CashSessionRow = { id:string; user_id:string; user_name:string; vehicle_label:string|null; expected_cash_minor:number; handed_cash_minor:number; counted_cash_minor:number|null; discrepancy_reason:string|null; status:'open'|'submitted'|'reconciled' };
 type TeamUser = { id:string; display_name:string; phone:string|null; role:'owner'|'depot_manager'|'order_rep'|'van_sales'|'delivery_driver'; is_active:number };
@@ -160,7 +160,7 @@ export default function App() {
     return true;
   }
   async function refreshDistributionOrders(db:Awaited<ReturnType<typeof openAppDatabase>>){
-    const rows=await db.query(`SELECT o.id,o.order_number,c.name AS customer_name,u.display_name AS created_by_name,o.assigned_vehicle_id,v.label AS vehicle_label,o.status,o.total_minor,o.created_at FROM sales_orders o JOIN customers c ON c.id=o.customer_id JOIN users u ON u.id=o.created_by LEFT JOIN vehicles v ON v.id=o.assigned_vehicle_id ORDER BY o.created_at DESC LIMIT 100`);
+    const rows=await db.query(`SELECT o.id,o.order_number,c.name AS customer_name,o.created_by AS created_by_user_id,u.display_name AS created_by_name,o.assigned_vehicle_id,v.label AS vehicle_label,o.status,o.total_minor,o.created_at FROM sales_orders o JOIN customers c ON c.id=o.customer_id JOIN users u ON u.id=o.created_by LEFT JOIN vehicles v ON v.id=o.assigned_vehicle_id ORDER BY o.created_at DESC LIMIT 100`);
     const orders=(rows.values??[]) as unknown as DistributionOrderRow[];
     const lineEntries=await Promise.all(orders.map(async order=>{
       const result=await db.query(`SELECT sol.id,sol.product_id,sol.product_name_snapshot,sol.variant_id,sol.quantity,sol.unit_price_minor,
@@ -553,6 +553,49 @@ export default function App() {
     finally { setSaving(false); }
   }
 
+
+  async function submitVehicleSale(event: FormEvent<HTMLFormElement>) {
+    if(!requirePermission('create_vehicle_sales'))return;
+    event.preventDefault();
+    if(!saleCustomerId||saleLines.length===0||saleLines.some(line=>!line.productId||!Number.isFinite(Number(line.quantity))||Number(line.quantity)<=0)){setError('اختار الزبون والمنتجات والكميات الصحيحة.');return;}
+    const collectedMinor=madToMinorUnits(Number(saleCollected||0));
+    if(!Number.isSafeInteger(collectedMinor)||collectedMinor<0){setError('راجع المبلغ اللي تجمع دابا.');return;}
+    if(collectedMinor>0&&!requirePermission('collect_vehicle_sales_cash'))return;
+    setError('');setNotice('');setSaving(true);
+    try{
+      const db=await openAppDatabase();
+      const assigned=await db.query("SELECT v.id,v.assigned_user_id,sl.id AS location_id FROM vehicles v JOIN stock_locations sl ON sl.vehicle_id=v.id AND sl.location_type='vehicle' AND sl.is_active=1 WHERE v.vehicle_type='van_sales' AND v.is_active=1 AND v.assigned_user_id=?",[currentUser?.id]);
+      if((assigned.values??[]).length!==1)throw new Error('خاص تكون عندك سيارة بيع نشيطة واحدة معيّنة ليك ومخزونها مفعّل.');
+      const vehicle=assigned.values?.[0];
+      if(!vehicle?.location_id)throw new Error('مخزون سيارة البيع غير موجود.');
+      await db.beginTransaction();
+      try{
+        const result=await new SalesRepository(db).create({
+          id:crypto.randomUUID(),invoiceNumber:'TV-'+Date.now(),customerId:saleCustomerId,
+          sellerUserId:currentUser!.id,locationId:String(vehicle.location_id),vehicleId:String(vehicle.id),
+          lines:saleLines.map(line=>({productId:line.productId,quantity:Number(line.quantity)})),
+          collectedMinor,paymentMethod:'cash',note:'بيع مباشر من سيارة البيع',
+        },'external');
+        const now=new Date().toISOString();
+        if(collectedMinor>0){
+          const active=await db.query("SELECT id FROM cash_sessions WHERE user_id=? AND vehicle_id=? AND status='open' ORDER BY opened_at DESC LIMIT 1",[currentUser!.id,String(vehicle.id)]);
+          if(active.values?.[0])await db.run('UPDATE cash_sessions SET expected_cash_minor=expected_cash_minor+? WHERE id=?',[collectedMinor,active.values[0].id]);
+          else await db.run("INSERT INTO cash_sessions (id,user_id,vehicle_id,opened_at,opening_cash_minor,expected_cash_minor,status) VALUES (?,?,?,?,0,?,'open')",[crypto.randomUUID(),currentUser!.id,String(vehicle.id),now,collectedMinor]);
+        }
+        await db.commitTransaction();
+        setNotice('تسجلات فاتورة السيارة '+result.invoiceNumber+'. المحصل '+formatMad(result.collectedMinor)+' والباقي '+formatMad(result.dueMinor)+'.');
+      }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
+      await refresh(repository??new ProductRepository(db));
+      setCustomers(await new CustomerRepository(db).list());
+      setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
+      setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
+      await refreshCashSessions(db);
+      await refreshDistributionOrders(db);
+      setSaleLines([{productId:'',quantity:'1'}]);setSaleCollected('');
+    }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تسجيل بيع السيارة.');}
+    finally{setSaving(false);}
+  }
+
   async function submitSale(event: FormEvent<HTMLFormElement>) {
     if(!requirePermission('create_depot_sales'))return;
     event.preventDefault();
@@ -619,7 +662,7 @@ export default function App() {
             <button className="primary-button" disabled={saving||customers.length===0||products.length===0}>إرسال الطلب للديبو</button>
           </form>
           <div className="section-divider"></div><h4>طلباتي</h4>
-          {distributionOrders.filter(order=>order.created_by_name===currentUser.display_name).length===0?<p className="hint">مازال ما سجلتي حتى طلب.</p>:distributionOrders.filter(order=>order.created_by_name===currentUser.display_name).map(order=><article className="team-row" key={order.id}><div><strong>{order.order_number} · {order.customer_name}</strong><span>{order.vehicle_label||'السيارة لم تحدد بعد'} · {formatMad(order.total_minor)}</span><span>الحالة: {({draft:'مسودة',submitted:'مرسل للديبو',accepted:'مقبول',preparing:'قيد التحضير',ready:'جاهز',partially_delivered:'تسليم جزئي',delivered:'تم التسليم',cancelled:'ملغى'} as Record<string,string>)[order.status]}</span></div></article>)}
+          {distributionOrders.filter(order=>order.created_by_user_id===currentUser.id).length===0?<p className="hint">مازال ما سجلتي حتى طلب.</p>:distributionOrders.filter(order=>order.created_by_name===currentUser.display_name).map(order=><article className="team-row" key={order.id}><div><strong>{order.order_number} · {order.customer_name}</strong><span>{order.vehicle_label||'السيارة لم تحدد بعد'} · {formatMad(order.total_minor)}</span><span>الحالة: {({draft:'مسودة',submitted:'مرسل للديبو',accepted:'مقبول',preparing:'قيد التحضير',ready:'جاهز',partially_delivered:'تسليم جزئي',delivered:'تم التسليم',cancelled:'ملغى'} as Record<string,string>)[order.status]}</span></div></article>)}
         </section>
       </div>}
       {currentUser?.role==='depot_manager'&&repository&&<div className="content-grid">
@@ -628,8 +671,28 @@ export default function App() {
           {distributionOrders.filter(order=>!['delivered','cancelled'].includes(order.status)).length===0?<p className="hint">ما كايناش طلبات مفتوحة حالياً.</p>:distributionOrders.filter(order=>!['delivered','cancelled'].includes(order.status)).map(order=><article className="team-row" key={order.id}><div><strong>{order.order_number} · {order.customer_name}</strong><span>طلب من: {order.created_by_name} · {order.vehicle_label||'بلا سيارة محددة'}</span><span>الحالة: {({draft:'مسودة',submitted:'مرسل للديبو',accepted:'مقبول',preparing:'قيد التحضير',ready:'جاهز',partially_delivered:'تسليم جزئي',delivered:'تم التسليم',cancelled:'ملغى'} as Record<string,string>)[order.status]}</span></div><div className="order-actions">{order.status==='submitted'&&<button type="button" className="secondary-button" disabled={saving} onClick={()=>changeOrderStatus(order,'accepted')}>قبول الطلب</button>}{order.status==='accepted'&&<button type="button" className="secondary-button" disabled={saving} onClick={()=>changeOrderStatus(order,'preparing')}>بدء التحضير</button>}{order.status==='preparing'&&<button type="button" className="primary-button" disabled={saving} onClick={()=>changeOrderStatus(order,'ready')}>تأكيد الجاهزية</button>}{order.status==='ready'&&<button type="button" className="secondary-button" disabled={saving||!order.assigned_vehicle_id} onClick={()=>loadOrderToVehicle(order)}>تحميل سيارة التوصيل</button>}</div></article>)}
           <p className="hint">التسليم النهائي وإصدار فاتورة الكميات المسلمة من اختصاص السائق المعيّن، ولا يمكن للديبو تأكيده بدلاً عنه.</p>
         </section>
+
+        <section className="panel team-panel"><div className="panel-heading"><div><h3>استلام ومطابقة النقدية</h3><p>راجع الجلسات اللي تسلمات للديبو وسجل المبلغ المعدود فعلياً</p></div></div>
+          {cashSessions.filter(session=>session.status==='submitted').length===0?<p className="hint">ما كايناش عهد نقدية كتسنى المطابقة.</p>:cashSessions.filter(session=>session.status==='submitted').map(session=><article className="team-row" key={session.id}><div><strong>{session.user_name} · {session.vehicle_label||'بدون سيارة'}</strong><span>المفروض: {formatMad(session.expected_cash_minor)} · تسلم: {formatMad(session.handed_cash_minor)}</span><label>المبلغ المعدود (DH)<input type="number" min="0" step="0.01" value={cashCountedAmounts[session.id]??''} onChange={e=>setCashCountedAmounts(current=>({...current,[session.id]:e.target.value}))}/></label><label>سبب الفرق إذا وجد<input value={cashDiscrepancyReasons[session.id]??''} onChange={e=>setCashDiscrepancyReasons(current=>({...current,[session.id]:e.target.value}))}/></label><button type="button" className="secondary-button" disabled={saving} onClick={()=>reconcileCashSession(session)}>تأكيد المطابقة</button></div></article>)}
+        </section>
         <section className="panel stock-panel"><div className="panel-heading"><div><h3>المخزون والتنبيهات</h3><p>مراقبة المنتجات والكميات المنخفضة</p></div></div>
           {products.length===0?<p className="hint">مازال ما تسجلوش المنتجات.</p>:products.map(product=><article className="alert-row" key={product.id}><div><strong>{product.name}</strong><span>حد التنبيه: {product.low_stock_threshold}</span></div><strong>{product.total_stock} متوفر</strong></article>)}
+        </section>
+      </div>}
+
+      {currentUser?.role==='van_sales'&&repository&&<div className="content-grid">
+        <section className="panel sales-panel"><div className="panel-heading"><div><h3>بيع مباشر من السيارة</h3><p>الفاتورة كتخصم من مخزون السيارة المعيّنة ليك فقط</p></div><span className="step-mark">بيع السيارة</span></div>
+          <form onSubmit={submitVehicleSale}>
+            <label>الزبون<select required value={saleCustomerId} onChange={e=>setSaleCustomerId(e.target.value)}><option value="">اختار الزبون</option>{customers.map(customer=><option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
+            {saleLines.map((line,index)=><div className="sale-line" key={index}><label>المنتج<select required value={line.productId} onChange={e=>setSaleLines(current=>current.map((item,i)=>i===index?{...item,productId:e.target.value}:item))}><option value="">اختار المنتج</option>{products.map(product=><option key={product.id} value={product.id}>{product.name} · {formatMad(product.sale_price_minor)}</option>)}</select></label><label>الكمية<input type="number" min="0.01" step="0.01" required value={line.quantity} onChange={e=>setSaleLines(current=>current.map((item,i)=>i===index?{...item,quantity:e.target.value}:item))}/></label><button type="button" className="remove-line" disabled={saleLines.length===1} onClick={()=>setSaleLines(current=>current.filter((_,i)=>i!==index))}>حذف السطر</button></div>)}
+            <button type="button" className="secondary-button" onClick={()=>setSaleLines(current=>[...current,{productId:'',quantity:'1'}])}>+ إضافة منتج</button>
+            <label>المبلغ النقدي المحصل دابا (DH)<input type="number" min="0" step="0.01" value={saleCollected} onChange={e=>setSaleCollected(e.target.value)} placeholder="0 إذا البيع بالدين"/></label>
+            <button className="primary-button" disabled={saving||customers.length===0||products.length===0}>تأكيد البيع وخصم مخزون السيارة</button>
+          </form>
+          <p className="hint">الثمن كيتاخد مباشرة من سعر المنتج المسجل؛ ما كاينش حقل لتغييره. المبالغ المحصلة كتدخل لعهدة السيارة.</p>
+        </section>
+        <section className="panel team-panel"><div className="panel-heading"><div><h3>عهدة النقدية ديالي</h3><p>المبالغ النقدية المسجلة من مبيعات السيارة</p></div></div>
+          {cashSessions.filter(session=>session.user_id===currentUser.id).length===0?<p className="hint">مازال ما تسجلات حتى عملية نقدية.</p>:cashSessions.filter(session=>session.user_id===currentUser.id).map(session=><article className="team-row" key={session.id}><div><strong>{session.vehicle_label||'سيارة البيع'}</strong><span>المتوقع: {formatMad(session.expected_cash_minor)} · المسلم: {formatMad(session.handed_cash_minor)} · الباقي: {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</span><span>الحالة: {session.status==='open'?'مفتوحة':session.status==='submitted'?'تسلمات للديبو':'تمت المطابقة'}</span></div></article>)}
         </section>
       </div>}
       {currentUser?.role==='delivery_driver'&&repository&&<div className="content-grid">
