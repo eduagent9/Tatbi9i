@@ -3,7 +3,7 @@ import type { SqliteExecutor } from './sqlite-database';
 import { SalesRepository } from './sales';
 
 function fakeDb(stock: number[] = [10], failMovement = false) {
-  const balances = stock.map((quantity,index)=>({id:'b'+index,batch_id:'batch'+index,quantity,expiry_date:index===0?'2027-01-01':'2027-06-01'}));
+  const balances = stock.map((quantity,index)=>({id:'b'+index,batch_id:'batch'+index,quantity,expiry_date:index===0?'2027-01-01':'2027-06-01',unit_cost_minor:index===0?100:300}));
   const calls: Array<{sql:string;values?:unknown[]}> = [];
   const db: SqliteExecutor = {
     execute: vi.fn(async () => undefined),
@@ -40,6 +40,9 @@ describe('SalesRepository',()=>{
     expect(calls.some(x=>x.sql.includes('INSERT INTO invoices'))).toBe(true);
     expect(calls.some(x=>x.sql.includes('INSERT INTO invoice_lines'))).toBe(true);
     expect(calls.filter(x=>x.sql.includes('INSERT INTO invoice_line_batch_allocations'))).toHaveLength(2);
+    const invoiceLine = calls.find(x=>x.sql.includes('INSERT INTO invoice_lines'));
+    expect(invoiceLine?.values?.[6]).toBe(167);
+    expect(calls.filter(x=>x.sql.includes('INSERT INTO invoice_line_batch_allocations')).map(x=>x.values?.[4])).toEqual([100,300]);
     expect(calls.some(x=>x.sql.includes('INSERT INTO payments'))).toBe(true);
     expect(db.commitTransaction).toHaveBeenCalledOnce();
     expect(db.rollbackTransaction).not.toHaveBeenCalled();
