@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canCollectDeliveryCash, canPerform, type AppPermission, type AppRole } from './permissions';
+import { canCollectDeliveryCash, canPerform, type AppPermission } from './permissions';
 
 describe('role permission policy', () => {
   it('grants the owner all permissions', () => {
