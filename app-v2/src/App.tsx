@@ -286,6 +286,34 @@ export default function App() {
       {!loading && error && <div className="message error" role="alert">{error}<small>المعاينة فالمتصفح ما كتخزنش البيانات؛ افتح تطبيق Android المبني باش تجرب SQLite.</small></div>}
       {notice && <div className="message success" role="status">{notice}</div>}
       {repository && <div className="content-grid">
+        <section className="panel team-panel">
+          <div className="panel-heading"><div><h3>الفريق وتعيين السيارات</h3><p>تسجيل أعضاء الفريق وربط سيارات البيع والتوصيل بالمسؤول عنها</p></div><span className="step-mark">الفريق</span></div>
+          <form onSubmit={submitTeamMember}>
+            <label>اسم المستخدم<input required value={teamName} onChange={e=>setTeamName(e.target.value)} placeholder="اسم المندوب أو السائق" /></label>
+            <div className="two-cols"><label>الهاتف<input value={teamPhone} onChange={e=>setTeamPhone(e.target.value)} placeholder="اختياري" /></label>
+              <label>الدور<select value={teamRole} onChange={e=>setTeamRole(e.target.value as TeamUser["role"])}>
+                <option value="depot_manager">مسؤول الديبو</option><option value="order_rep">مندوب الطلبات</option><option value="van_sales">مندوب البيع بالسيارة</option><option value="delivery_driver">السائق</option>
+              </select></label></div>
+            <button className="secondary-button" disabled={saving}>{saving?"كيتم الحفظ...":"إضافة عضو للفريق"}</button>
+          </form>
+          <div className="team-list"><h4>الأعضاء المسجلون</h4>
+            {teamUsers.map(user=><article className="team-row" key={user.id}><div><strong>{user.display_name}</strong><span>{roleLabels[user.role]} · {user.phone||"بدون هاتف"}</span></div><span className={user.is_active?"team-active":"team-inactive"}>{user.is_active?"نشط":"موقوف"}</span></article>)}
+          </div>
+          <div className="section-divider"></div>
+          <div className="team-list"><h4>السيارات والمسؤولون عنها</h4>
+            {teamVehicles.length===0?<p className="hint">مازال ما تسجلات حتى سيارة. زيد السيارة من قسم المخزون والتحويلات.</p>:teamVehicles.map(vehicle=>{
+              const eligible=teamUsers.filter(user=>user.is_active===1&&user.role===(vehicle.vehicle_type==="van_sales"?"van_sales":"delivery_driver"));
+              return <article className="vehicle-assignment" key={vehicle.id}>
+                <div><strong>{vehicle.label}</strong><span>{vehicle.code} · {vehicle.vehicle_type==="van_sales"?"سيارة بيع":"سيارة توصيل"}</span></div>
+                <label>المسؤول<select value={assignment[vehicle.id]??vehicle.assigned_user_id??""} onChange={e=>setAssignment(current=>({...current,[vehicle.id]:e.target.value}))}>
+                  <option value="">بدون مسؤول</option>{eligible.map(user=><option key={user.id} value={user.id}>{user.display_name}</option>)}
+                </select></label>
+                <button type="button" className="secondary-button" disabled={saving} onClick={()=>saveVehicleAssignment(vehicle)}>حفظ التعيين</button>
+              </article>;
+            })}
+          </div>
+          <p className="hint">هاد الجزء كيسجل الفريق وتعيين السيارات فقط؛ تسجيل الدخول وفرض الصلاحيات على العمليات مازال خاصهم يتكملو قبل الاستعمال الحقيقي.</p>
+        </section>
         <section className="panel form-panel"><div className="panel-heading"><div><h3>إضافة منتج</h3><p>المبالغ بالدرهم المغربي</p></div><span className="step-mark">01</span></div>
           <form onSubmit={submit}>
             <label>اسم المنتج<input required value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder="مثال: ماء معدني 1.5L" /></label>
