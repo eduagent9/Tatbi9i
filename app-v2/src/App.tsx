@@ -155,7 +155,7 @@ export default function App() {
         await db.run('INSERT INTO sales_orders (id,order_number,customer_id,created_by,assigned_vehicle_id,status,subtotal_minor,offer_discount_minor,total_minor,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',[id,number,orderCustomerId,orderCreatorId,orderVehicleId||null,'submitted',subtotal,0,subtotal,now,now]);
         for(const line of prepared)await db.run('INSERT INTO sales_order_lines (id,order_id,product_id,quantity,unit_price_minor,line_total_minor,product_name_snapshot,unit_snapshot) VALUES (?,?,?,?,?,?,?,?)',[crypto.randomUUID(),id,line.productId,line.quantity,line.price,line.total,line.name,line.unit]);
         await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),orderCreatorId,'order.submitted','sales_order',id,JSON.stringify({number,subtotal,lines:prepared.length}),now]);
-        await db.commitTransaction();
+      await db.commitTransaction();
       }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
       await refreshDistributionOrders(db);setOrderLines([{productId:'',quantity:'1'}]);setNotice('تسجل الطلب '+number+' وتبعث للديبو للتحضير.');
     }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تسجيل الطلب.');}
@@ -226,19 +226,19 @@ export default function App() {
       if(!driverId||location.values?.[0]?.role!=='delivery_driver'||Number(location.values?.[0]?.is_active)!==1)throw new Error('عيّن سائقاً نشيطاً لسيارة التوصيل قبل إصدار فاتورة التسليم.');
       const collectedMinor=madToMinorUnits(Number(deliveryCollectedAmount||0));
       if(!Number.isSafeInteger(collectedMinor)||collectedMinor<0)throw new Error('راجع المبلغ النقدي المستخلص.');
+      await db.beginTransaction();
+      try{
       const result=await new SalesRepository(db).create({
         id:crypto.randomUUID(),invoiceNumber:'T-'+Date.now(),customerId:String(customerId),
         sellerUserId:String(driverId),locationId:String(locationId),vehicleId:order.assigned_vehicle_id,orderId:order.id,
         lines:selected.map(item=>({productId:item.line.product_id,variantId:item.line.variant_id,quantity:item.quantity,unitPriceMinor:item.line.unit_price_minor})),
         collectedMinor,paymentMethod:'cash',note:'تحصيل عند تسليم طلب '+order.order_number
-      });
+      },'external');
       const now=new Date().toISOString();
       const remaining=await db.query(`SELECT COUNT(*) AS pending FROM sales_order_lines sol
         WHERE sol.order_id=? AND sol.quantity>COALESCE((SELECT SUM(il.quantity) FROM invoice_lines il JOIN invoices i ON i.id=il.invoice_id
           WHERE i.order_id=sol.order_id AND il.product_id=sol.product_id AND il.variant_id IS sol.variant_id AND i.status<>'voided'),0)+0.000000001`,[order.id]);
       const nextStatus=Number(remaining.values?.[0]?.pending??0)===0?'delivered':'partially_delivered';
-      await db.beginTransaction();
-      try{
         if(collectedMinor>0){
           const activeSession=await db.query("SELECT id FROM cash_sessions WHERE user_id=? AND vehicle_id=? AND status='open' ORDER BY opened_at DESC LIMIT 1",[String(driverId),order.assigned_vehicle_id]);
           if(activeSession.values?.[0])await db.run('UPDATE cash_sessions SET expected_cash_minor=expected_cash_minor+? WHERE id=?',[collectedMinor,activeSession.values[0].id]);
