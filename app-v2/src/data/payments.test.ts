@@ -36,6 +36,17 @@ describe('PaymentRepository',()=>{
     expect(db.rollbackTransaction).toHaveBeenCalledOnce();
     expect(db.commitTransaction).not.toHaveBeenCalled();
   });
+
+  it('lists only outstanding confirmed invoices with their customer and due balance',async()=>{
+    const {db}=fakeDb(200);
+    db.query=vi.fn(async(sql:string)=>sql.includes('JOIN customers')
+      ? {values:[{invoiceId:'i1',invoiceNumber:'F-001',customerId:'c1',customerName:'متجر',totalMinor:1000,collectedMinor:200,dueMinor:800}]}
+      : {values:[{id:'i1',customer_id:'c1',total_minor:1000,collected_minor:200,status:'confirmed',confirmed_at:'2026-11-20T10:00:00Z'}]});
+    const rows=await new PaymentRepository(db).listOutstanding();
+    expect(rows).toEqual([{invoiceId:'i1',invoiceNumber:'F-001',customerId:'c1',customerName:'متجر',totalMinor:1000,collectedMinor:200,dueMinor:800}]);
+    expect(db.query).toHaveBeenCalledWith(expect.stringContaining("i.confirmed_at IS NOT NULL"));
+  });
+
   it('rejects zero and fractional-cent payments',async()=>{
     const {db}=fakeDb();
     const repo=new PaymentRepository(db);
