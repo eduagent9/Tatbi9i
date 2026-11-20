@@ -236,6 +236,10 @@ export default function App() {
       if(!lines.values?.length)throw new Error('الطلب ما فيه حتى منتج.');
       await db.beginTransaction();
       try{
+        const currentOrder=await db.query('SELECT status,assigned_vehicle_id FROM sales_orders WHERE id=?',[order.id]);
+        const currentState=currentOrder.values?.[0];
+        if(!currentState||String(currentState.status)!=='ready')throw new Error('حالة الطلب تبدلات؛ خاصو يبقى جاهز قبل التحميل. حدّث اللائحة وراجع الطلب.');
+        if(String(currentState.assigned_vehicle_id??'')!==order.assigned_vehicle_id)throw new Error('السيارة المعيّنة تبدلات؛ حدّث اللائحة قبل التحميل.');
         for(const line of lines.values){
           let remaining=Number(line.quantity);
           const balances=await db.query("SELECT id,batch_id,quantity FROM stock_balances WHERE product_id=? AND variant_id IS ? AND location_id='loc-depot-main' AND quantity>0 ORDER BY updated_at,id",[line.product_id,line.variant_id??null]);
