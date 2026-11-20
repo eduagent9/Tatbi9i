@@ -1,14 +1,21 @@
 # Data layer boundary
 
-The new UI must not read or write `localStorage` directly.
+The new UI must not read or write `localStorage` directly. Database access will be introduced behind typed repositories/services.
 
-Database access will be introduced behind typed repositories/services. The initial schema and adapters are intentionally not implemented until the SQLite plugin has passed an Android build/runtime smoke test and the legacy import contract has been reviewed.
+## Safety rules
 
-Rules:
-
-- Use transactions for any operation that changes stock, invoices, payments, returns, or cash reconciliation.
+- Use transactions for every operation changing stock, invoices, payments, returns, or cash reconciliation.
 - Keep historical invoice and purchase line snapshots immutable.
-- Use stable IDs and migration version records.
-- Keep all timestamps in a canonical UTC/offset-aware representation for new records, while preserving raw legacy date strings.
-- Never import or overwrite the legacy `tatbiqi.database.v1` browser storage automatically.
-- Do not enable real sales workflows in this scaffold.
+- Use stable IDs and versioned migrations.
+- Store new money as integer Moroccan centimes; legacy numeric values must be retained raw until reconciled.
+- Preserve original legacy date strings; normalize only when parsing is unambiguous.
+- Never automatically read, mutate, or clear `localStorage` key `tatbiqi.database.v1`.
+- Legacy validation is read-only and reports errors/warnings; it never repairs or imports records.
+- Do not enable real sales workflows until SQLite Android runtime tests, repository transactions, and import dry-run reconciliation pass.
+
+## Current implementation
+
+- `legacy-validation.ts`: structural validation, duplicate/missing IDs, and dangling invoice references.
+- `money.ts`: safe conversion between MAD and integer centimes.
+- `migrations/001_initial_schema.sql`: initial schema draft.
+- No live SQLite connection or import operation is enabled yet.
