@@ -3,6 +3,7 @@ import { openAppDatabase, type SqliteExecutor } from '../data/sqlite-database';
 import { StockCountRepository } from '../data/stock-counts';
 import { ReturnsRepository, type ReturnCondition } from '../data/returns';
 import { StockRepository } from '../data/stock';
+import { StockLocationRepository, type StockLocationKind } from '../data/stock-locations';
 
 type CountRow={product_id:string;product_name:string;variant_id:string|null;variant_name:string|null;batch_id:string|null;batch_code:string|null;expected:number;counted:string};
 type InvoiceOption={id:string;invoice_number:string;customer_name:string;created_at:string};
@@ -27,6 +28,10 @@ export function StockAndReturnsPanel(){
  const [transferBalanceId,setTransferBalanceId]=useState('');
  const [transferDestination,setTransferDestination]=useState('');
  const [transferQuantity,setTransferQuantity]=useState('');
+ const [newLocationLabel,setNewLocationLabel]=useState('');
+ const [newLocationKind,setNewLocationKind]=useState<StockLocationKind>('depot');
+ const [newVehicleCode,setNewVehicleCode]=useState('');
+ const [newVehicleType,setNewVehicleType]=useState<'van_sales'|'delivery'>('van_sales');
  const [busy,setBusy]=useState(false);
  const [message,setMessage]=useState('');
  const [error,setError]=useState('');
@@ -77,6 +82,15 @@ export function StockAndReturnsPanel(){
   return()=>{live=false;};
  },[db,invoiceId]);
 
+ async function submitLocation(event:FormEvent<HTMLFormElement>){
+  event.preventDefault();if(!db)return;setError('');setMessage('');setBusy(true);
+  try{
+   const result=await new StockLocationRepository(db).create({id:uid(),label:newLocationLabel,kind:newLocationKind,
+    vehicleCode:newLocationKind==='vehicle'?newVehicleCode:undefined,vehicleType:newVehicleType,createdBy:owner});
+   await loadTransferOptions(db);setNewLocationLabel('');setNewVehicleCode('');
+   setMessage('تزادت الوجهة '+result.label+' بنجاح، وولات متاحة لتحويل المخزون.');
+  }catch(e){setError(e instanceof Error?e.message:'تعذر إنشاء موقع المخزون.');}finally{setBusy(false);}
+ }
  async function submitTransfer(event:FormEvent<HTMLFormElement>){
   event.preventDefault();if(!db)return;setError('');setMessage('');
   const source=transferBalances.find(x=>x.balance_id===transferBalanceId);
@@ -124,6 +138,16 @@ export function StockAndReturnsPanel(){
  return <section className="panel operations-panel">
   <div className="panel-heading"><div><h3>الجرد والمرتجعات</h3><p>تسوية المخزون وإرجاع السلع من فواتير البيع</p></div><span className="step-mark">12</span></div>
   {error&&<p className="hint" role="alert">{error}</p>}{message&&<p className="hint" role="status">{message}</p>}
+  <div className="section-divider"></div>
+  <h4>إضافة مستودع أو سيارة توزيع</h4>
+  <p className="hint">زيد وجهة جديدة باش تقدر تحول ليها السلع. إنشاء السيارة والموقع ديال مخزونها كيتسجل بجوج داخل معاملة واحدة.</p>
+  <form onSubmit={submitLocation}>
+   <div className="two-cols"><label>نوع الموقع<select value={newLocationKind} onChange={e=>setNewLocationKind(e.target.value as StockLocationKind)}><option value="depot">مستودع / فرع</option><option value="vehicle">سيارة توزيع</option></select></label>
+   <label>اسم الموقع<input required value={newLocationLabel} onChange={e=>setNewLocationLabel(e.target.value)} placeholder="مثلاً: مستودع الفرع 2"/></label></div>
+   {newLocationKind==='vehicle'&&<div className="two-cols"><label>رمز السيارة<input required value={newVehicleCode} onChange={e=>setNewVehicleCode(e.target.value)} placeholder="VAN-01"/></label>
+    <label>نوع السيارة<select value={newVehicleType} onChange={e=>setNewVehicleType(e.target.value as 'van_sales'|'delivery')}><option value="van_sales">سيارة بيع وتوزيع</option><option value="delivery">سيارة توصيل</option></select></label></div>}
+   <button className="primary-button" disabled={busy||!newLocationLabel.trim()||(newLocationKind==='vehicle'&&!newVehicleCode.trim())}>{busy?'كيتم إنشاء الموقع...':'إضافة الموقع'}</button>
+  </form>
   <div className="section-divider"></div>
   <h4>تحويل المخزون بين المواقع</h4>
   <p className="hint">اختار دفعة ورصيد المصدر والوجهة. التحويل كيتسجل كحركة واحدة داخل معاملة، وكيحافظ على رقم الدفعة والصلاحية.</p>
