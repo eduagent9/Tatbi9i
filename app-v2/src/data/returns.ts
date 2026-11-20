@@ -64,11 +64,26 @@ export class ReturnsRepository {
         if(!source||!source.product_id)throw new Error('سطر المنتج غير موجود في الفاتورة الأصلية.');
         const remaining=Number(source.quantity)-Number(source.returned_quantity);
         if(line.quantity>remaining+1e-9)throw new RangeError('كمية المرتجع أكبر من الكمية المباعة المتبقية.');
-        const batchId=line.batchId?.trim()||null;
+        const batchId=line.batchId === undefined ? undefined : (line.batchId?.trim() || null);
+        if(batchId===undefined)throw new Error('اختار الدفعة الأصلية للمنتج المرتجع.');
         if(batchId){
           const b=await this.db.query('SELECT id FROM product_batches WHERE id=? AND product_id=? AND variant_id IS ? LIMIT 1',[batchId,source.product_id,source.variant_id]);
           if(!b.values?.length)throw new Error('دفعة الإرجاع لا تطابق المنتج.');
         }
+        const allocation=await this.db.query(
+          `SELECT COALESCE(SUM(a.quantity),0) AS allocated_quantity,
+            COALESCE((SELECT SUM(rl.quantity) FROM product_return_lines rl
+              JOIN product_returns r ON r.id=rl.return_id
+              WHERE rl.invoice_line_id=? AND rl.batch_id IS ? AND r.status='completed'),0) AS returned_quantity
+           FROM invoice_line_batch_allocations a
+           WHERE a.invoice_line_id=? AND a.batch_id IS ?`,
+          [source.id,batchId,source.id,batchId],
+        );
+        const allocationRow=allocation.values?.[0];
+        const batchRemaining=Number(allocationRow?.allocated_quantity??0)-Number(allocationRow?.returned_quantity??0);
+        if(!Number.isFinite(batchRemaining)||line.quantity>batchRemaining+1e-9)
+          throw new RangeError('الكمية المرتجعة كتفوت الكمية المباعة من هاد الدفعة.');
+
         const cumulative=Math.round(Number(allocated.get(source.id))*((Number(source.returned_quantity)+line.quantity)/Number(source.quantity)));
         const lineValue=cumulative-Number(source.returned_value_minor);
         if(!Number.isSafeInteger(lineValue)||lineValue<0)throw new Error('قيمة المرتجع غير صالحة.');
