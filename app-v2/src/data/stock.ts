@@ -10,6 +10,7 @@ export interface StockMovementInput {
 }
 
 export interface StockBalanceRow { product_id: string; variant_id: string | null; location_id: string; batch_id: string | null; quantity: number; }
+export interface StockMovementRecord { id:string; product_name:string; movement_type:string; quantity:number; from_label:string|null; to_label:string|null; occurred_at:string; note:string|null; }
 export interface ExpiryAlertRow { product_id:string; product_name:string; batch_id:string; batch_code:string|null; expiry_date:string; location_label:string; quantity:number; }
 
 function nonEmpty(value: string, label: string): string {
@@ -61,6 +62,19 @@ export class StockRepository {
       await this.db.rollbackTransaction().catch(() => undefined);
       throw error;
     }
+  }
+
+  async getRecentMovements(limit=20):Promise<StockMovementRecord[]> {
+    if(!Number.isSafeInteger(limit)||limit<1||limit>200) throw new RangeError('عدد حركات المخزون غير صالح.');
+    const result=await this.db.query(
+      `SELECT sm.id,p.name AS product_name,sm.movement_type,sm.quantity,
+       source.label AS from_label,destination.label AS to_label,sm.occurred_at,sm.note
+       FROM stock_movements sm JOIN products p ON p.id=sm.product_id
+       LEFT JOIN stock_locations source ON source.id=sm.from_location_id
+       LEFT JOIN stock_locations destination ON destination.id=sm.to_location_id
+       ORDER BY sm.occurred_at DESC,sm.id DESC LIMIT ?`,[limit],
+    );
+    return (result.values??[]) as unknown as StockMovementRecord[];
   }
 
   async getExpiryAlerts(): Promise<ExpiryAlertRow[]> {
