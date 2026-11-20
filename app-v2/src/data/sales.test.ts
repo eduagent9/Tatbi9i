@@ -39,6 +39,7 @@ describe('SalesRepository',()=>{
     expect(balances.map(x=>x.quantity)).toEqual([0,4]);
     expect(calls.some(x=>x.sql.includes('INSERT INTO invoices'))).toBe(true);
     expect(calls.some(x=>x.sql.includes('INSERT INTO invoice_lines'))).toBe(true);
+    expect(calls.filter(x=>x.sql.includes('INSERT INTO invoice_line_batch_allocations'))).toHaveLength(2);
     expect(calls.some(x=>x.sql.includes('INSERT INTO payments'))).toBe(true);
     expect(db.commitTransaction).toHaveBeenCalledOnce();
     expect(db.rollbackTransaction).not.toHaveBeenCalled();
