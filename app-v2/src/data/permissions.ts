@@ -10,6 +10,8 @@ export type AppPermission =
   | 'manage_returns'
   | 'manage_customers'
   | 'create_orders'
+  | 'create_depot_sales'
+  | 'collect_customer_debt'
   | 'prepare_orders'
   | 'load_delivery_vehicle'
   | 'deliver_assigned_orders'
@@ -27,7 +29,7 @@ export type AppPermission =
 const permissions: Record<Exclude<AppRole, 'owner'>, readonly AppPermission[]> = {
   depot_manager: [
     'view_dashboard', 'manage_vehicles', 'manage_products', 'manage_purchases',
-    'adjust_depot_stock', 'manage_returns', 'manage_customers', 'prepare_orders',
+    'adjust_depot_stock', 'manage_returns', 'manage_customers', 'prepare_orders', 'create_depot_sales', 'collect_customer_debt',
     'load_delivery_vehicle', 'receive_cash_handover', 'reconcile_cash',
   ],
   order_rep: ['create_orders', 'manage_customers'],
