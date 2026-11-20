@@ -374,11 +374,9 @@ export default function App() {
     if(!requirePermission('reconcile_cash'))return;
     if(session.status!=='submitted'){setError('خاص جلسة النقدية تكون تسلمات قبل المطابقة.');return;}
     const counted=madToMinorUnits(Number(cashCountedAmounts[session.id]??''));
-    const difference=counted-Number(session.expected_cash_minor);
     const reason=(cashDiscrepancyReasons[session.id]??'').trim();
-    let reconciledDifference=difference;
+    let reconciledDifference=0;
     if(!Number.isSafeInteger(counted)||counted<0){setError('دخل المبلغ اللي تعدّ فعلياً فالديبو.');return;}
-    if(difference!==0&&!reason){setError('كتب سبب الفرق بين المبلغ المتوقع والمبلغ المعدود.');return;}
     setError('');setNotice('');setSaving(true);
     try{
       const db=await openAppDatabase(),now=new Date().toISOString();
