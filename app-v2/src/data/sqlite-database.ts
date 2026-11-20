@@ -11,6 +11,7 @@ import expensesSchema from './migrations/005_expenses.sql?raw';
 import stockCountsSchema from './migrations/006_stock_counts.sql?raw';
 import returnTraceabilitySchema from './migrations/007_return_traceability.sql?raw';
 import invoiceBatchAllocationsSchema from './migrations/008_invoice_batch_allocations.sql?raw';
+import userPinAuthSchema from './migrations/009_user_pin_auth.sql?raw';
 
 export interface SqliteExecutor {
   execute(statement: string): Promise<unknown>;
@@ -42,6 +43,7 @@ export const APP_MIGRATIONS: Migration[] = [
   { version: 6, name: 'stock_counts', sql: stockCountsSchema },
   { version: 7, name: 'return_traceability', sql: returnTraceabilitySchema },
   { version: 8, name: 'invoice_batch_allocations', sql: invoiceBatchAllocationsSchema },
+  { version: 9, name: 'user_pin_auth', sql: userPinAuthSchema },
 ];
 
 export async function applyMigrations(
