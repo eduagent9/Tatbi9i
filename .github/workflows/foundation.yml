@@ -48,12 +48,13 @@ jobs:
           db.execute('PRAGMA foreign_keys = ON')
           db.executescript((schema_dir / '001_initial_schema.sql').read_text(encoding='utf-8'))
           db.executescript((schema_dir / '002_default_depot.sql').read_text(encoding='utf-8'))
+db.executescript((schema_dir / '003_purchases.sql').read_text(encoding='utf-8'))
           tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-          required = {'products', 'vehicles', 'stock_locations', 'stock_balances', 'stock_movements', 'invoices', 'invoice_lines', 'payments', 'cash_handovers', 'audit_events', 'sync_outbox', 'legacy_import_runs'}
+          required = {'products', 'vehicles', 'stock_locations', 'stock_balances', 'stock_movements', 'invoices', 'invoice_lines', 'payments', 'cash_handovers', 'audit_events', 'sync_outbox', 'legacy_import_runs', 'purchase_receipts', 'purchase_receipt_lines'}
           missing = required - tables
           assert not missing, f'Missing schema tables: {sorted(missing)}'
           assert db.execute('PRAGMA foreign_keys').fetchone()[0] == 1
           depot = db.execute("SELECT id, label FROM stock_locations WHERE location_type='depot'").fetchone()
           assert depot == ('loc-depot-main', 'المستودع الرئيسي'), f'Unexpected default depot: {depot}'
-          print(f'SQLite schema OK: {len(tables)} tables created; default depot seeded; foreign keys enabled')
+          print(f'SQLite schema OK: {len(tables)} tables created; purchases migration applied; default depot seeded; foreign keys enabled')
           PY
