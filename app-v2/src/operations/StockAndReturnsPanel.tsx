@@ -129,7 +129,7 @@ export function StockAndReturnsPanel(){
   <p className="hint">اختار دفعة ورصيد المصدر والوجهة. التحويل كيتسجل كحركة واحدة داخل معاملة، وكيحافظ على رقم الدفعة والصلاحية.</p>
   <form onSubmit={submitTransfer}>
    <label>المنتج والدفعة وموقع المصدر<select required value={transferBalanceId} onChange={e=>{setTransferBalanceId(e.target.value);setTransferQuantity('');}}><option value="">اختار الرصيد المتوفر</option>
-    {transferBalances.map(x=><option key={x.balance_id} value={x.balance_id}>{x.product_name}{x.variant_name?' · '+x.variant_name:''}{x.batch_code?' · دفعة '+x.batch_code:''} · {x.location_label} · متوفر {x.quantity}</option>)}
+    {transferBalances.map(x => <option key={x.balance_id} value={x.balance_id}>{[x.product_name,x.variant_name,x.batch_code ? 'دفعة '+x.batch_code : null,x.location_label,'متوفر '+x.quantity].filter(Boolean).join(' · ')}</option>)}
    </select></label>
    <div className="two-cols"><label>الوجهة<select required value={transferDestination} onChange={e=>setTransferDestination(e.target.value)}><option value="">اختار الوجهة</option>{locations.filter(x=>x.id!==transferBalances.find(b=>b.balance_id===transferBalanceId)?.location_id).map(x=><option key={x.id} value={x.id}>{x.label}</option>)}</select></label>
    <label>الكمية<input type="number" min="0.001" step="0.001" max={transferBalances.find(x=>x.balance_id===transferBalanceId)?.quantity??undefined} value={transferQuantity} onChange={e=>setTransferQuantity(e.target.value)} placeholder="0"/></label></div>
