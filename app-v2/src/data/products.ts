@@ -67,7 +67,7 @@ export class ProductRepository {
       if (barcode) {
         await this.db.run(
           'INSERT INTO barcodes (id,product_id,barcode,unit,units_per_scan) VALUES (?,?,?,?,?)',
-          (input.id + ':barcode').split('').length ? [input.id + ':barcode',id,barcode,unit,unit === 'carton' ? pieces : 1] : [],
+          [input.id + ':barcode',id,barcode,unit,unit === 'carton' ? pieces : 1],
         );
       }
       await this.db.commitTransaction();
