@@ -48,6 +48,17 @@ describe('StockRepository', () => {
     expect(db.query).toHaveBeenCalledWith(expect.stringContaining('sb.quantity>0'));
   });
 
+
+  it('lists recent stock movements with source and destination labels',async()=>{
+    const db=stockDb().db;
+    db.query=vi.fn(async(sql:string)=>sql.includes('FROM stock_movements')
+      ? {values:[{id:'m1',product_name:'ماء',movement_type:'purchase_receipt',quantity:12,from_label:null,to_label:'المستودع الرئيسي',occurred_at:'2026-11-20T12:00:00Z',note:'توريد'}]}
+      : {values:[]});
+    const rows=await new StockRepository(db).getRecentMovements(10);
+    expect(rows[0]).toMatchObject({id:'m1',product_name:'ماء',quantity:12,to_label:'المستودع الرئيسي'});
+    expect(db.query).toHaveBeenCalledWith(expect.stringContaining('ORDER BY sm.occurred_at DESC'),[10]);
+  });
+
   it('rejects zero quantity and identical transfer locations', async () => {
     const repo=new StockRepository(stockDb().db);
     await expect(repo.record({id:'m4',productId:'p1',toLocationId:'depot',quantity:0,movementType:'opening'})).rejects.toThrow(RangeError);
