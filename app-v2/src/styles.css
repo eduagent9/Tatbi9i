@@ -18,3 +18,5 @@ form{display:grid;gap:14px}label{display:grid;gap:7px;color:#4c6471;font-size:12
 .finance-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.finance-grid article{display:grid;gap:8px;padding:14px;border:1px solid #e6edef;border-radius:13px;background:#fbfdfd}.finance-grid article span{font-size:11px;color:#748892}.finance-grid article strong{font-size:17px;color:#245f5b}.finance-grid .net-profit{background:#edf7f3;border-color:#d6eae0}.finance-grid .net-profit strong{color:#1c6d4a}.expense-panel{align-self:start}@media(max-width:380px){.finance-grid{grid-template-columns:1fr}}
 
 .sale-line{display:grid;grid-template-columns:minmax(0,1fr) minmax(90px,.45fr);gap:10px;padding:12px;border:1px solid #e7edef;border-radius:13px;background:#fbfdfd}.remove-line{grid-column:1/-1;border:0;background:transparent;color:#a34d43;text-align:right;font-size:11px;cursor:pointer}.remove-line:disabled{opacity:.3;cursor:not-allowed}
+
+.purchase-line{display:grid;gap:10px;padding:12px;border:1px solid #e7edef;border-radius:13px;background:#fbfdfd}.purchase-line .two-cols{gap:9px}
