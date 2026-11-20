@@ -3,7 +3,6 @@ import { openAppDatabase, type SqliteExecutor } from '../data/sqlite-database';
 import { StockCountRepository } from '../data/stock-counts';
 import { ReturnsRepository, type ReturnCondition } from '../data/returns';
 
-type ProductOption={id:string;name:string;variant_id:string|null;variant_name:string|null};
 type CountRow={product_id:string;product_name:string;variant_id:string|null;variant_name:string|null;batch_id:string|null;batch_code:string|null;expected:number;counted:string};
 type InvoiceOption={id:string;invoice_number:string;customer_name:string;created_at:string};
 type InvoiceLine={id:string;product_id:string;product_name:string;variant_id:string|null;quantity:number;unit_price_minor:number;remaining:number};
