@@ -283,7 +283,7 @@ export default function App() {
             <article className="net-profit"><span>صافي الربح التقديري</span><strong>{formatSignedMad(financialSummary.netProfitMinor)}</strong></article>
             <article><span>الديون المستحقة</span><strong>{formatMad(financialSummary.outstandingMinor)}</strong></article>
           </div> : <p className="hint">الملخص المالي غير متوفر حالياً.</p>}
-          <p className="hint">الربح محسوب من تكلفة الشراء المحفوظة داخل كل فاتورة ناقص مصاريف التشغيل. مازال ما كيشملش المرتجعات أو الضرائب أو المصاريف غير المسجلة.</p>
+          <p className="hint">الربح كيراعي المرتجعات القابلة للبيع في تكلفة البضاعة، وكيطرح مصاريف التشغيل المسجلة. المرتجعات التالفة أو المنتهية كتبقى محسوبة ضمن التكلفة، والضرائب والمصاريف غير المسجلة ما داخلاش.</p>
         </section>
         <section className="panel expense-panel"><div className="panel-heading"><div><h3>مصاريف التشغيل</h3><p>سجل النقل والوقود والكراء والمصاريف الأخرى</p></div><span className="step-mark">10</span></div>
           <form onSubmit={submitExpense}>
