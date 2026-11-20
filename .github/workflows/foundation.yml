@@ -35,3 +35,20 @@ jobs:
         run: npm install
       - name: Type-check and build
         run: npm run build
+      - name: Validate SQLite schema and constraints
+        run: |
+          python - <<'PY'
+          import sqlite3
+          from pathlib import Path
+
+          schema = Path('src/data/migrations/001_initial_schema.sql').read_text(encoding='utf-8')
+          db = sqlite3.connect(':memory:')
+          db.execute('PRAGMA foreign_keys = ON')
+          db.executescript(schema)
+          tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+          required = {'products', 'vehicles', 'stock_locations', 'stock_balances', 'stock_movements', 'invoices', 'invoice_lines', 'payments', 'cash_handovers', 'audit_events', 'sync_outbox', 'legacy_import_runs'}
+          missing = required - tables
+          assert not missing, f'Missing schema tables: {sorted(missing)}'
+          assert db.execute('PRAGMA foreign_keys').fetchone()[0] == 1
+          print(f'SQLite schema OK: {len(tables)} tables created; foreign keys enabled')
+          PY
