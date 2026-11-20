@@ -347,7 +347,7 @@ export default function App() {
         await db.run("INSERT INTO payments (id,invoice_id,customer_id,amount_minor,method,payment_kind,received_by,received_at,note) VALUES (?,NULL,NULL,?,'cash','cash_handover',?,?,?)",[crypto.randomUUID(),amount,receiver.id,now,'وصل تسليم '+receipt]);
         const totalHanded=Number(session.handed_cash_minor)+amount;
         if(totalHanded>=Number(session.expected_cash_minor))await db.run("UPDATE cash_sessions SET status='submitted',closed_at=? WHERE id=? AND status='open'",[now,session.id]);
-        await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),receiver.id,'cash.handed_over','cash_session',session.id,JSON.stringify({receipt,from:session.user_id,to:receiver.id,amountMinor:amount,totalHanded}),now]);
+        await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),currentUser.id,'cash.handed_over','cash_session',session.id,JSON.stringify({receipt,from:session.user_id,to:receiver.id,amountMinor:amount,totalHanded}),now]);
         await db.commitTransaction();
       }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
       await refreshCashSessions(db);setHandoverAmount('');setNotice('تسجل وصل تسليم النقدية '+receipt+' بقيمة '+formatMad(amount)+'.');
