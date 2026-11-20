@@ -31,7 +31,7 @@ jobs:
           const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(x => x[1]);
           const duplicates = ids.filter((id, i) => ids.indexOf(id) !== i);
           if (duplicates.length) throw new Error('Duplicate HTML IDs: ' + [...new Set(duplicates)].join(', '));
-          for (const token of ['function checkout(', 'function saveReturn(', 'function saveDebtPayment(', 'function savePurchase(', 'function saveStockCount(', 'function deleteProduct(', 'function saveProduct(', 'function expiryDays(', 'function backup()', 'function restore(']) {
+          for (const token of ['function cartQty(', 'function checkout(', 'function saveReturn(', 'function saveDebtPayment(', 'function savePurchase(', 'function saveStockCount(', 'function deleteProduct(', 'function saveProduct(', 'function expiryDays(', 'function backup()', 'function restore(', 'تاريخ الصلاحية غير صحيح']) {
             if (!html.includes(token)) throw new Error('Missing core feature: ' + token);
           }
           const vm = require('vm');
