@@ -6,6 +6,8 @@ import { StockRepository } from './data/stock';
 import { CustomerRepository, type CustomerRecord } from './data/customers';
 import { SalesRepository } from './data/sales';
 import { PaymentRepository, type OutstandingInvoice } from './data/payments';
+import { SupplierRepository, type SupplierRecord } from './data/suppliers';
+import { PurchaseRepository } from './data/purchases';
 
 const emptyForm = { name: '', category: 'مواد غذائية', subcategory: '', unit: 'piece' as 'piece' | 'carton', pieces: '12', cost: '', price: '', threshold: '0', barcode: '' };
 
@@ -14,6 +16,15 @@ export default function App() {
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [outstandingInvoices, setOutstandingInvoices] = useState<OutstandingInvoice[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
+  const [supplierName, setSupplierName] = useState('');
+  const [supplierPhone, setSupplierPhone] = useState('');
+  const [purchaseSupplierId, setPurchaseSupplierId] = useState('');
+  const [purchaseProductId, setPurchaseProductId] = useState('');
+  const [purchaseQuantity, setPurchaseQuantity] = useState('1');
+  const [purchaseUnitCost, setPurchaseUnitCost] = useState('');
+  const [purchaseBatch, setPurchaseBatch] = useState('');
+  const [purchaseExpiry, setPurchaseExpiry] = useState('');
   const [collectionInvoiceId, setCollectionInvoiceId] = useState('');
   const [collectionAmount, setCollectionAmount] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -45,6 +56,7 @@ export default function App() {
       await refresh(repo);
       setCustomers(await new CustomerRepository(db).list());
       setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
+      setSuppliers(await new SupplierRepository(db).list());
     }).catch(reason => { if (alive) setError(reason instanceof Error ? reason.message : 'تعذر فتح قاعدة البيانات.'); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -89,6 +101,43 @@ export default function App() {
     finally { setSaving(false); }
   }
 
+  async function submitSupplier(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(''); setNotice(''); setSaving(true);
+    try {
+      const db = await openAppDatabase();
+      await new SupplierRepository(db).create({ id: crypto.randomUUID(), name: supplierName, phone: supplierPhone });
+      setSuppliers(await new SupplierRepository(db).list());
+      setSupplierName(''); setSupplierPhone('');
+      setNotice('تسجل المورد بنجاح.');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر حفظ المورد.'); }
+    finally { setSaving(false); }
+  }
+
+  async function submitPurchase(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!purchaseSupplierId || !purchaseProductId) { setError('اختار المورد والمنتج أولاً.'); return; }
+    setError(''); setNotice(''); setSaving(true);
+    try {
+      const db = await openAppDatabase();
+      const result = await new PurchaseRepository(db).create({
+        id: crypto.randomUUID(), receiptNumber: 'ACH-' + Date.now(),
+        supplierId: purchaseSupplierId, receivedBy: 'local-owner', locationId: 'loc-depot-main',
+        lines: [{
+          productId: purchaseProductId, quantity: Number(purchaseQuantity),
+          unitCostMinor: madToMinorUnits(Number(purchaseUnitCost)),
+          batchCode: purchaseBatch || null, expiryDate: purchaseExpiry || null,
+        }],
+      });
+      const repo = repository ?? new ProductRepository(db);
+      await refresh(repo);
+      setSuppliers(await new SupplierRepository(db).list());
+      setPurchaseQuantity('1'); setPurchaseUnitCost(''); setPurchaseBatch(''); setPurchaseExpiry('');
+      setNotice('تسجل وصل الشراء ' + result.receiptNumber + ' بمجموع ' + formatMad(result.totalMinor));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر تسجيل التوريد.'); }
+    finally { setSaving(false); }
+  }
+
   async function submitCollection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!collectionInvoiceId) { setError('اختار الفاتورة أولاً.'); return; }
@@ -127,6 +176,7 @@ export default function App() {
       await refresh(repo);
       setCustomers(await new CustomerRepository(db).list());
       setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
+      setSuppliers(await new SupplierRepository(db).list());
       setSaleQuantity('1'); setSaleDiscount('0'); setSaleCollected('');
       setNotice('تسجلات الفاتورة ' + result.invoiceNumber + ' بنجاح. المتبقي على الزبون: ' + formatMad(result.dueMinor));
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر تسجيل الفاتورة.'); }
@@ -187,6 +237,23 @@ export default function App() {
             <button className="primary-button" disabled={saving}>{saving ? 'كيتم الحفظ...' : 'إضافة الزبون'}</button>
           </form>
           <div className="customer-list">{customers.length === 0 ? <p className="hint">مازال ما تسجل حتى زبون.</p> : customers.map(customer => <article className="customer-row" key={customer.id}><div><strong>{customer.name}</strong><span>{customer.phone || customer.city || 'بدون معلومات إضافية'}</span></div><div><strong>{formatMad(customer.debt_minor)}</strong><span>الدين · {customer.invoice_count} فاتورة</span></div></article>)}</div>
+        </section>
+        <section className="panel supplier-panel"><div className="panel-heading"><div><h3>الموردون والتوريدات</h3><p>إضافة مورد وتسجيل وصولات الشراء مع الصلاحية</p></div><span className="step-mark">07</span></div>
+          <form onSubmit={submitSupplier}>
+            <label>اسم المورد<input required value={supplierName} onChange={e => setSupplierName(e.target.value)} placeholder="اسم الشركة أو الموزع" /></label>
+            <label>الهاتف<input value={supplierPhone} onChange={e => setSupplierPhone(e.target.value)} placeholder="اختياري" /></label>
+            <button className="secondary-button" disabled={saving}>{saving ? 'كيتم الحفظ...' : 'إضافة المورد'}</button>
+          </form>
+          <div className="supplier-list">{suppliers.map(supplier => <article className="customer-row" key={supplier.id}><div><strong>{supplier.name}</strong><span>{supplier.phone || 'بدون هاتف'}</span></div><div><strong>{formatMad(supplier.purchased_minor)}</strong><span>{supplier.receipt_count} وصل شراء</span></div></article>)}</div>
+          <div className="section-divider"></div>
+          <form onSubmit={submitPurchase}>
+            <label>المورد<select required value={purchaseSupplierId} onChange={e => setPurchaseSupplierId(e.target.value)}><option value="">اختار المورد</option>{suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label>
+            <label>المنتج<select required value={purchaseProductId} onChange={e => setPurchaseProductId(e.target.value)}><option value="">اختار المنتج</option>{products.map(product => <option key={product.id} value={product.id}>{product.name}</option>)}</select></label>
+            <div className="two-cols"><label>الكمية<input type="number" min="0.01" step="0.01" required value={purchaseQuantity} onChange={e => setPurchaseQuantity(e.target.value)} /></label><label>تكلفة الوحدة (DH)<input type="number" min="0" step="0.01" required value={purchaseUnitCost} onChange={e => setPurchaseUnitCost(e.target.value)} /></label></div>
+            <div className="two-cols"><label>رقم الدفعة<input value={purchaseBatch} onChange={e => setPurchaseBatch(e.target.value)} placeholder="اختياري" /></label><label>تاريخ الصلاحية<input type="date" value={purchaseExpiry} onChange={e => setPurchaseExpiry(e.target.value)} /></label></div>
+            <button className="primary-button" disabled={saving || suppliers.length === 0 || products.length === 0}>{saving ? 'كيتسجل التوريد...' : 'تأكيد التوريد وإضافة المخزون'}</button>
+          </form>
+          <p className="hint">التوريد كيزيد المخزون ويحدث متوسط تكلفة الشراء. وصل الشراء والدفعات وحركة المخزون كيتسجلو فمعاملة واحدة.</p>
         </section>
         <section className="panel collection-panel"><div className="panel-heading"><div><h3>تحصيل الديون</h3><p>تسجيل أداء لاحق على فاتورة سابقة</p></div><span className="step-mark">06</span></div>
           <form onSubmit={submitCollection}>
