@@ -575,12 +575,15 @@ export default function App() {
 
   return (
     <main className="app-shell" dir="rtl">
-      <header className="topbar"><div><span className="brand-mark">ت</span><div><p className="eyebrow">إدارة التوزيع والمبيعات</p><h1>تطبيقي</h1></div></div><span className="mode-tag">نسخة تطوير</span></header>
+      <header className="topbar"><div><span className="brand-mark">ت</span><div><p className="eyebrow">إدارة التوزيع والمبيعات</p><h1>تطبيقي</h1></div></div><div className="topbar-actions">{currentUser&&<><span className="mode-tag">{currentUser.display_name} · {roleLabels[currentUser.role]}</span><button type="button" className="secondary-button" onClick={logoutUser}>خروج</button></>}<span className="mode-tag">نسخة تطوير</span></div></header>
       <section className="page-heading"><div><p className="eyebrow">المخزون</p><h2>المنتجات</h2><p>سجل المنتجات والأسعار والباركود ووحدات البيع</p></div><div className="total-card"><strong>{products.length}</strong><span>منتج مسجل</span></div></section>
       {loading && <div className="message">كنوجد قاعدة البيانات...</div>}
       {!loading && error && <div className="message error" role="alert">{error}<small>المعاينة فالمتصفح ما كتخزنش البيانات؛ افتح تطبيق Android المبني باش تجرب SQLite.</small></div>}
       {notice && <div className="message success" role="status">{notice}</div>}
-      {repository && <div className="content-grid">
+      {!loading&&!currentUser&&authMode==='setup'&&<section className="panel auth-panel"><div className="panel-heading"><div><h3>إعداد دخول المالك</h3><p>أول مرة خاصك تختار رمز PIN خاص بالمالك. غادي يتخزن كـ hash مملح، ماشي كنص واضح.</p></div></div><form onSubmit={setupOwnerPin}><label>رمز PIN (4 إلى 8 أرقام)<input type="password" inputMode="numeric" autoComplete="new-password" maxLength={8} required value={setupPin} onChange={e=>setSetupPin(e.target.value)} /></label><label>تأكيد رمز PIN<input type="password" inputMode="numeric" autoComplete="new-password" maxLength={8} required value={setupPinConfirm} onChange={e=>setSetupPinConfirm(e.target.value)} /></label><button className="primary-button" disabled={saving}>{saving?'كيتم الإعداد...':'حفظ رمز المالك والدخول'}</button></form></section>}
+      {!loading&&!currentUser&&authMode==='login'&&<section className="panel auth-panel"><div className="panel-heading"><div><h3>تسجيل الدخول</h3><p>اختار المستخدم ودخل رمز PIN ديالو.</p></div></div><form onSubmit={loginUser}><label>المستخدم<select required value={authUserId} onChange={e=>setAuthUserId(e.target.value)}>{authUsers.filter(user=>user.is_active===1&&user.pin_hash&&user.pin_salt).map(user=><option key={user.id} value={user.id}>{user.display_name} · {roleLabels[user.role]}</option>)}</select></label><label>رمز PIN<input type="password" inputMode="numeric" autoComplete="current-password" maxLength={8} required value={authPin} onChange={e=>setAuthPin(e.target.value)} /></label><button className="primary-button" disabled={saving}>{saving?'كيتم التحقق...':'دخول'}</button></form></section>}
+      {currentUser&&currentUser.role!=='owner'&&<section className="panel auth-panel"><h3>الحساب مسجل الدخول</h3><p>مرحبا {currentUser.display_name}. واجهة وصلاحيات هاد الدور ما زالت قيد الربط والاختبار؛ لذلك وقفنا الوصول للعمليات حالياً لحماية البيانات.</p><button type="button" className="secondary-button" onClick={logoutUser}>تسجيل الخروج</button></section>}
+      {currentUser?.role==='owner'&&repository && <div className="content-grid">
         <section className="panel team-panel">
           <div className="panel-heading"><div><h3>طلبات المحلات</h3><p>مندوب الطلبات يسجل طلب الزبون، والديبو يتابع التحضير والتجهيز</p></div><span className="step-mark">01</span></div>
           <form onSubmit={submitDistributionOrder}>
@@ -603,6 +606,7 @@ export default function App() {
               <label>الدور<select value={teamRole} onChange={e=>setTeamRole(e.target.value as TeamUser["role"])}>
                 <option value="depot_manager">مسؤول الديبو</option><option value="order_rep">مندوب الطلبات</option><option value="van_sales">مندوب البيع بالسيارة</option><option value="delivery_driver">السائق</option>
               </select></label></div>
+            <label>رمز PIN للمستخدم (4 إلى 8 أرقام)<input type="password" inputMode="numeric" autoComplete="new-password" maxLength={8} required value={teamPin} onChange={e=>setTeamPin(e.target.value)} /></label>
             <button className="secondary-button" disabled={saving}>{saving?"كيتم الحفظ...":"إضافة عضو للفريق"}</button>
           </form>
           <div className="team-list"><h4>الأعضاء المسجلون</h4>
