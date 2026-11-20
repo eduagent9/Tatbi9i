@@ -7,11 +7,11 @@ function dbMock(options:{status?:string;failMovement?:boolean;priorQty?:number}=
  let balance:{id:string;quantity:number}|null={id:'b1',quantity:3};
  const db:SqliteExecutor={
   execute:vi.fn(async()=>undefined),
-  query:vi.fn(async(sql:string)=>{
+  query:vi.fn(async(sql:string,values?:unknown[])=>{
    if(sql.includes('FROM invoices'))return{values:[{...invoice,status:options.status??invoice.status,confirmed_at:options.status==='draft'?null:invoice.confirmed_at}]};
    if(sql.includes('FROM invoice_lines'))return{values:[{...line,returned_quantity:options.priorQty??0,returned_value_minor:(options.priorQty??0)*500}]};
    if(sql.includes('FROM product_batches'))return{values:[{id:'batch1'}]};
-   if(sql.includes('FROM invoice_line_batch_allocations'))return{values:[{allocated_quantity:2,returned_quantity:options.priorQty??0}]};
+   if(sql.includes('FROM invoice_line_batch_allocations'))return{values:values?.[1]==='batch1'?[{allocated_quantity:2,returned_quantity:options.priorQty??0}]:[{allocated_quantity:0,returned_quantity:0}]};
    if(sql.includes('FROM stock_balances'))return{values:balance?[balance]:[]};
    return{values:[]};
   }),
@@ -55,7 +55,13 @@ describe('ReturnsRepository',()=>{
 
  it('requires a source batch allocation and rejects returns against an unrelated batch',async()=>{
   const{db}=dbMock();
-  await expect(new ReturnsRepository(db).complete({...input,lines:[{...input.lines[0],batchId:null}]})).rejects.toThrow('كتفوت الكمية المباعة');
+  await expect(new ReturnsRepository(db).complete({...input,lines:[{...input.lines[0],batchId:'other-batch'}]})).rejects.toThrow('كتفوت الكمية المباعة');
+  expect(db.rollbackTransaction).toHaveBeenCalledOnce();
+ });
+
+ it('requires an explicit original batch selection',async()=>{
+  const{db}=dbMock();
+  await expect(new ReturnsRepository(db).complete({...input,lines:[{id:'rl1',invoiceLineId:'il-1',quantity:1,condition:'sellable'}]})).rejects.toThrow('اختار الدفعة الأصلية');
   expect(db.rollbackTransaction).toHaveBeenCalledOnce();
  });
  it('rejects draft invoices and invalid quantities before any transaction',async()=>{
