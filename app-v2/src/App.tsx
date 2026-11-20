@@ -30,6 +30,7 @@ export default function App() {
   const [orderVehicleId,setOrderVehicleId]=useState('');
   const [deliveryCollectedAmount,setDeliveryCollectedAmount]=useState('0');
   const [orderLines,setOrderLines]=useState<Array<{productId:string;quantity:string}>>([{productId:'',quantity:'1'}]);
+  const [deliveryCollections,setDeliveryCollections]=useState<Record<string,string>>({});
   const [teamUsers,setTeamUsers]=useState<TeamUser[]>([]);
   const [teamVehicles,setTeamVehicles]=useState<TeamVehicle[]>([]);
   const [teamName,setTeamName]=useState('');
@@ -178,15 +179,19 @@ export default function App() {
       const location=await db.query("SELECT id FROM stock_locations WHERE vehicle_id=? AND location_type='vehicle' AND is_active=1",[order.assigned_vehicle_id]);
       const locationId=location.values?.[0]?.id;
       if(!locationId)throw new Error('مخزون السيارة غير موجود.');
-      const orderInfo=await db.query('SELECT customer_id FROM sales_orders WHERE id=?',[order.id]);
+      const orderInfo=await db.query('SELECT o.customer_id,v.assigned_user_id,u.role FROM sales_orders o JOIN vehicles v ON v.id=o.assigned_vehicle_id LEFT JOIN users u ON u.id=v.assigned_user_id WHERE o.id=?',[order.id]);
       const customerId=orderInfo.values?.[0]?.customer_id;
+      const driverId=orderInfo.values?.[0]?.assigned_user_id;
       if(!customerId)throw new Error('الزبون المرتبط بالطلب غير موجود.');
+      if(!driverId||orderInfo.values?.[0]?.role!=='delivery_driver')throw new Error('عيّن سائقاً نشيطاً لسيارة التوصيل قبل إصدار فاتورة التسليم.');
+      const collectedMinor=madToMinorUnits(Number(deliveryCollections[order.id]||0));
+      if(!Number.isSafeInteger(collectedMinor)||collectedMinor<0)throw new Error('راجع المبلغ النقدي المحصل.');
       const details=await db.query('SELECT product_id,quantity,unit_price_minor FROM sales_order_lines WHERE order_id=? ORDER BY rowid',[order.id]);
       const collectedMinor=madToMinorUnits(Number(deliveryCollectedAmount||0));
       if(!Number.isSafeInteger(collectedMinor)||collectedMinor<0)throw new Error('راجع المبلغ النقدي المستخلص.');
       const result=await new SalesRepository(db).create({
         id:crypto.randomUUID(),invoiceNumber:'T-'+Date.now(),customerId:String(customerId),
-        sellerUserId:'local-owner',locationId:String(locationId),vehicleId:order.assigned_vehicle_id,orderId:order.id,
+        sellerUserId:String(driverId),locationId:String(locationId),vehicleId:order.assigned_vehicle_id,orderId:order.id,
         lines:(details.values??[]).map(line=>({productId:String(line.product_id),quantity:Number(line.quantity),unitPriceMinor:Number(line.unit_price_minor)})),
         collectedMinor,paymentMethod:'cash',note:'تحصيل عند تسليم طلب '+order.order_number
       });
@@ -436,7 +441,7 @@ export default function App() {
             <button className="primary-button" disabled={saving||customers.length===0||products.length===0||teamUsers.every(user=>user.role!=='order_rep')}>إرسال الطلب للديبو</button>
           </form>
           <div className="section-divider"></div><h4>متابعة الطلبات</h4>
-          {distributionOrders.length===0?<p className="hint">مازال ما تسجل حتى طلب.</p>:distributionOrders.map(order=><article className="team-row" key={order.id}><div><strong>{order.order_number} · {order.customer_name}</strong><span>{order.created_by_name} · {order.vehicle_label||'بلا سيارة محددة'} · {formatMad(order.total_minor)}</span><span>الحالة: {({draft:'مسودة',submitted:'مرسل للديبو',accepted:'مقبول',preparing:'قيد التحضير',ready:'جاهز للتحميل',partially_delivered:'تسليم جزئي',delivered:'تم التسليم',cancelled:'ملغى'} as Record<string,string>)[order.status]}</span></div><div className="order-actions">{order.status==='submitted'&&<button type="button" className="secondary-button" disabled={saving} onClick={()=>changeOrderStatus(order,'accepted')}>قبول الطلب</button>}{order.status==='accepted'&&<button type="button" className="secondary-button" disabled={saving} onClick={()=>changeOrderStatus(order,'preparing')}>بدء التحضير</button>}{order.status==='preparing'&&<button type="button" className="primary-button" disabled={saving} onClick={()=>changeOrderStatus(order,'ready')}>تأكيد الجاهزية</button>}{order.status==='ready'&&<><label>المبلغ النقدي المستخلص (DH)<input type="number" min="0" step="0.01" value={deliveryCollectedAmount} onChange={e=>setDeliveryCollectedAmount(e.target.value)} /></label><button type="button" className="secondary-button" disabled={saving||!order.assigned_vehicle_id} onClick={()=>loadOrderToVehicle(order)}>تحميل السيارة</button><button type="button" className="primary-button" disabled={saving} onClick={()=>deliverOrder(order)}>تأكيد التسليم وإصدار الفاتورة</button></>}{order.status==='partially_delivered'&&<button type="button" className="primary-button" disabled={saving} onClick={()=>changeOrderStatus(order,'delivered')}>إغلاق الطلب بعد التسليم</button>}</div></article>)}
+          {distributionOrders.length===0?<p className="hint">مازال ما تسجل حتى طلب.</p>:distributionOrders.map(order=><article className="team-row" key={order.id}><div><strong>{order.order_number} · {order.customer_name}</strong><span>{order.created_by_name} · {order.vehicle_label||'بلا سيارة محددة'} · {formatMad(order.total_minor)}</span><span>الحالة: {({draft:'مسودة',submitted:'مرسل للديبو',accepted:'مقبول',preparing:'قيد التحضير',ready:'جاهز للتحميل',partially_delivered:'تسليم جزئي',delivered:'تم التسليم',cancelled:'ملغى'} as Record<string,string>)[order.status]}</span></div><div className="order-actions">{order.status==='submitted'&&<button type="button" className="secondary-button" disabled={saving} onClick={()=>changeOrderStatus(order,'accepted')}>قبول الطلب</button>}{order.status==='accepted'&&<button type="button" className="secondary-button" disabled={saving} onClick={()=>changeOrderStatus(order,'preparing')}>بدء التحضير</button>}{order.status==='preparing'&&<button type="button" className="primary-button" disabled={saving} onClick={()=>changeOrderStatus(order,'ready')}>تأكيد الجاهزية</button>}{order.status==='ready'&&<><label>المبلغ النقدي المستخلص (DH)<input type="number" min="0" step="0.01" value={deliveryCollectedAmount} onChange={e=>setDeliveryCollectedAmount(e.target.value)} /></label><button type="button" className="secondary-button" disabled={saving||!order.assigned_vehicle_id} onClick={()=>loadOrderToVehicle(order)}>تحميل السيارة</button><label>النقد المحصل (DH)<input type="number" min="0" step="0.01" value={deliveryCollections[order.id]??'0'} onChange={e=>setDeliveryCollections(current=>({...current,[order.id]:e.target.value}))} /></label><button type="button" className="primary-button" disabled={saving} onClick={()=>deliverOrder(order)}>تأكيد التسليم وإصدار الفاتورة</button></>}{order.status==='partially_delivered'&&<button type="button" className="primary-button" disabled={saving} onClick={()=>changeOrderStatus(order,'delivered')}>إغلاق الطلب بعد التسليم</button>}</div></article>)}
           <p className="hint">هاد المرحلة كتسجل الطلبات وتتبع حالتها. تحميل السيارة، الكميات المسلّمة والمرتجعات والتحصيل النقدي غادي نربطهم كمرحلة تشغيلية مستقلة؛ ما كنعتابروش الطلب مسلّم حتى يتكمل هاد الربط.</p>
         </section>
         <section className="panel team-panel">
