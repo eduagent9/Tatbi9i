@@ -4,7 +4,7 @@ export type SalePaymentMethod = 'cash' | 'bank' | 'other';
 export interface SaleLineInput { productId: string; quantity: number; unitPriceMinor?: number; variantId?: string | null; }
 export interface CreateSaleInput {
   id: string; invoiceNumber: string; customerId: string; sellerUserId: string;
-  locationId: string; lines: SaleLineInput[]; discountMinor?: number;
+  locationId: string; vehicleId?: string | null; orderId?: string | null; lines: SaleLineInput[]; discountMinor?: number;
   collectedMinor?: number; paymentMethod?: SalePaymentMethod; note?: string;
 }
 export interface CreatedSale {
@@ -69,9 +69,9 @@ export class SalesRepository {
     try {
       await this.db.run(
         `INSERT INTO invoices
-         (id,invoice_number,customer_id,seller_user_id,status,subtotal_minor,offer_discount_minor,total_minor,collected_minor,confirmed_at,created_at,updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [invoiceId,invoiceNumber,customerId,sellerUserId,'confirmed',subtotalMinor,discountMinor,totalMinor,collectedMinor,timestamp,timestamp,timestamp],
+         (id,invoice_number,customer_id,order_id,seller_user_id,vehicle_id,status,subtotal_minor,offer_discount_minor,total_minor,collected_minor,confirmed_at,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [invoiceId,invoiceNumber,customerId,input.orderId??null,sellerUserId,input.vehicleId??null,'confirmed',subtotalMinor,discountMinor,totalMinor,collectedMinor,timestamp,timestamp,timestamp],
       );
 
       for (const line of prepared) {
