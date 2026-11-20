@@ -27,11 +27,7 @@ export default function App() {
   const [supplierName, setSupplierName] = useState('');
   const [supplierPhone, setSupplierPhone] = useState('');
   const [purchaseSupplierId, setPurchaseSupplierId] = useState('');
-  const [purchaseProductId, setPurchaseProductId] = useState('');
-  const [purchaseQuantity, setPurchaseQuantity] = useState('1');
-  const [purchaseUnitCost, setPurchaseUnitCost] = useState('');
-  const [purchaseBatch, setPurchaseBatch] = useState('');
-  const [purchaseExpiry, setPurchaseExpiry] = useState('');
+  const [purchaseLines, setPurchaseLines] = useState<Array<{productId:string;quantity:string;unitCost:string;batchCode:string;expiryDate:string}>>([{productId:'',quantity:'1',unitCost:'',batchCode:'',expiryDate:''}]);
   const [collectionInvoiceId, setCollectionInvoiceId] = useState('');
   const [collectionAmount, setCollectionAmount] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -142,24 +138,23 @@ export default function App() {
 
   async function submitPurchase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!purchaseSupplierId || !purchaseProductId) { setError('اختار المورد والمنتج أولاً.'); return; }
+    if (!purchaseSupplierId || purchaseLines.length===0 || purchaseLines.some(line=>!line.productId||!Number.isFinite(Number(line.quantity))||Number(line.quantity)<=0||!Number.isFinite(Number(line.unitCost))||Number(line.unitCost)<0)) { setError('اختار المورد والمنتجات وتأكد من الكميات والتكاليف.'); return; }
     setError(''); setNotice(''); setSaving(true);
     try {
       const db = await openAppDatabase();
       const result = await new PurchaseRepository(db).create({
         id: crypto.randomUUID(), receiptNumber: 'ACH-' + Date.now(),
         supplierId: purchaseSupplierId, receivedBy: 'local-owner', locationId: 'loc-depot-main',
-        lines: [{
-          productId: purchaseProductId, quantity: Number(purchaseQuantity),
-          unitCostMinor: madToMinorUnits(Number(purchaseUnitCost)),
-          batchCode: purchaseBatch || null, expiryDate: purchaseExpiry || null,
-        }],
+        lines: purchaseLines.map(line=>({
+          productId:line.productId,quantity:Number(line.quantity),unitCostMinor:madToMinorUnits(Number(line.unitCost)),
+          batchCode:line.batchCode||null,expiryDate:line.expiryDate||null,
+        })),
       });
       const repo = repository ?? new ProductRepository(db);
       await refresh(repo);
       setSuppliers(await new SupplierRepository(db).list());
       setExpiryAlerts(await new StockRepository(db).getExpiryAlerts());
-      setPurchaseQuantity('1'); setPurchaseUnitCost(''); setPurchaseBatch(''); setPurchaseExpiry('');
+      setPurchaseLines([{productId:'',quantity:'1',unitCost:'',batchCode:'',expiryDate:''}]);
       setNotice('تسجل وصل الشراء ' + result.receiptNumber + ' بمجموع ' + formatMad(result.totalMinor));
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر تسجيل التوريد.'); }
     finally { setSaving(false); }
@@ -310,10 +305,14 @@ export default function App() {
           <div className="section-divider"></div>
           <form onSubmit={submitPurchase}>
             <label>المورد<select required value={purchaseSupplierId} onChange={e => setPurchaseSupplierId(e.target.value)}><option value="">اختار المورد</option>{suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label>
-            <label>المنتج<select required value={purchaseProductId} onChange={e => setPurchaseProductId(e.target.value)}><option value="">اختار المنتج</option>{products.map(product => <option key={product.id} value={product.id}>{product.name}</option>)}</select></label>
-            <div className="two-cols"><label>الكمية<input type="number" min="0.01" step="0.01" required value={purchaseQuantity} onChange={e => setPurchaseQuantity(e.target.value)} /></label><label>تكلفة الوحدة (DH)<input type="number" min="0" step="0.01" required value={purchaseUnitCost} onChange={e => setPurchaseUnitCost(e.target.value)} /></label></div>
-            <div className="two-cols"><label>رقم الدفعة<input value={purchaseBatch} onChange={e => setPurchaseBatch(e.target.value)} placeholder="اختياري" /></label><label>تاريخ الصلاحية<input type="date" value={purchaseExpiry} onChange={e => setPurchaseExpiry(e.target.value)} /></label></div>
-            <button className="primary-button" disabled={saving || suppliers.length === 0 || products.length === 0}>{saving ? 'كيتسجل التوريد...' : 'تأكيد التوريد وإضافة المخزون'}</button>
+            {purchaseLines.map((line,index)=><div className="purchase-line" key={index}>
+              <label>المنتج<select required value={line.productId} onChange={e=>setPurchaseLines(current=>current.map((item,i)=>i===index?{...item,productId:e.target.value}:item))}><option value="">اختار المنتج</option>{products.map(product=><option key={product.id} value={product.id}>{product.name}</option>)}</select></label>
+              <div className="two-cols"><label>الكمية<input type="number" min="0.01" step="0.01" required value={line.quantity} onChange={e=>setPurchaseLines(current=>current.map((item,i)=>i===index?{...item,quantity:e.target.value}:item))} /></label><label>تكلفة الوحدة (DH)<input type="number" min="0" step="0.01" required value={line.unitCost} onChange={e=>setPurchaseLines(current=>current.map((item,i)=>i===index?{...item,unitCost:e.target.value}:item))} /></label></div>
+              <div className="two-cols"><label>رقم الدفعة<input value={line.batchCode} onChange={e=>setPurchaseLines(current=>current.map((item,i)=>i===index?{...item,batchCode:e.target.value}:item))} placeholder="اختياري" /></label><label>تاريخ الصلاحية<input type="date" value={line.expiryDate} onChange={e=>setPurchaseLines(current=>current.map((item,i)=>i===index?{...item,expiryDate:e.target.value}:item))} /></label></div>
+              <button type="button" className="remove-line" disabled={purchaseLines.length===1} onClick={()=>setPurchaseLines(current=>current.filter((_,i)=>i!==index))}>حذف السطر</button>
+            </div>)}
+            <button type="button" className="secondary-button" onClick={()=>setPurchaseLines(current=>[...current,{productId:'',quantity:'1',unitCost:'',batchCode:'',expiryDate:''}])}>+ إضافة منتج لوصل الشراء</button>
+            <button className="primary-button" disabled={saving || suppliers.length === 0 || products.length === 0 || purchaseLines.length===0}>{saving ? 'كيتسجل التوريد...' : 'تأكيد التوريد وإضافة المخزون'}</button>
           </form>
           <p className="hint">التوريد كيزيد المخزون ويحدث متوسط تكلفة الشراء. وصل الشراء والدفعات وحركة المخزون كيتسجلو فمعاملة واحدة.</p>
         </section>
