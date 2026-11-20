@@ -228,7 +228,16 @@ export default function App() {
       if(!Number.isSafeInteger(collectedMinor)||collectedMinor<0)throw new Error('راجع المبلغ النقدي المستخلص.');
       await db.beginTransaction();
       try{
-      const result=await new SalesRepository(db).create({
+        const currentOrder=await db.query('SELECT status,assigned_vehicle_id FROM sales_orders WHERE id=?',[order.id]);
+        const orderState=currentOrder.values?.[0];
+        if(!orderState||!['ready','partially_delivered'].includes(String(orderState.status)))throw new Error('حالة الطلب تبدلات؛ حدّث اللائحة قبل التسليم.');
+        if(String(orderState.assigned_vehicle_id??'')!==order.assigned_vehicle_id)throw new Error('السيارة المعيّنة للطلب تبدلات؛ راجع الطلب من جديد.');
+        const currentLines=await db.query(`SELECT sol.id,MAX(0,sol.quantity-COALESCE((SELECT SUM(il.quantity) FROM invoice_lines il JOIN invoices i ON i.id=il.invoice_id
+          WHERE i.order_id=sol.order_id AND il.product_id=sol.product_id AND il.variant_id IS sol.variant_id AND i.status<>'voided'),0)) AS remaining_quantity
+          FROM sales_order_lines sol WHERE sol.order_id=?`,[order.id]);
+        const currentRemaining=new Map((currentLines.values??[]).map(line=>[String(line.id),Number(line.remaining_quantity)]));
+        if(selected.some(item=>!currentRemaining.has(item.line.id)||item.quantity>Number(currentRemaining.get(item.line.id)??0)+1e-9))throw new Error('الكمية المتبقية تبدلات؛ حدّث الطلب وراجع الكميات قبل التسليم.');
+        const result=await new SalesRepository(db).create({
         id:crypto.randomUUID(),invoiceNumber:'T-'+Date.now(),customerId:String(customerId),
         sellerUserId:String(driverId),locationId:String(locationId),vehicleId:order.assigned_vehicle_id,orderId:order.id,
         lines:selected.map(item=>({productId:item.line.product_id,variantId:item.line.variant_id,quantity:item.quantity,unitPriceMinor:item.line.unit_price_minor})),
