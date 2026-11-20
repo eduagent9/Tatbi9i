@@ -216,7 +216,7 @@ export default function App() {
       const db=await openAppDatabase();
       const loaded=await db.query("SELECT id FROM stock_movements WHERE reference_type='sales_order_load' AND reference_id=? LIMIT 1",[order.id]);
       if(!loaded.values?.length)throw new Error('خاصك تحمّل الطلب للسيارة قبل تأكيد التسليم.');
-      const location=await db.query("SELECT sl.id,v.assigned_user_id,u.role FROM stock_locations sl JOIN vehicles v ON v.id=sl.vehicle_id LEFT JOIN users u ON u.id=v.assigned_user_id WHERE v.id=? AND v.vehicle_type='delivery' AND sl.location_type='vehicle' AND sl.is_active=1",[order.assigned_vehicle_id]);
+      const location=await db.query("SELECT sl.id,v.assigned_user_id,u.role,u.is_active FROM stock_locations sl JOIN vehicles v ON v.id=sl.vehicle_id LEFT JOIN users u ON u.id=v.assigned_user_id WHERE v.id=? AND v.vehicle_type='delivery' AND sl.location_type='vehicle' AND sl.is_active=1 AND v.is_active=1",[order.assigned_vehicle_id]);
       const locationId=location.values?.[0]?.id;
       if(!locationId)throw new Error('مخزون سيارة التوصيل غير موجود.');
       const orderInfo=await db.query('SELECT customer_id FROM sales_orders WHERE id=?',[order.id]);
