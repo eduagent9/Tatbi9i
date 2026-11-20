@@ -11,6 +11,7 @@ function dbMock(options:{status?:string;failMovement?:boolean;priorQty?:number}=
    if(sql.includes('FROM invoices'))return{values:[{...invoice,status:options.status??invoice.status,confirmed_at:options.status==='draft'?null:invoice.confirmed_at}]};
    if(sql.includes('FROM invoice_lines'))return{values:[{...line,returned_quantity:options.priorQty??0,returned_value_minor:(options.priorQty??0)*500}]};
    if(sql.includes('FROM product_batches'))return{values:[{id:'batch1'}]};
+   if(sql.includes('FROM invoice_line_batch_allocations'))return{values:[{allocated_quantity:2,returned_quantity:options.priorQty??0}]};
    if(sql.includes('FROM stock_balances'))return{values:balance?[balance]:[]};
    return{values:[]};
   }),
@@ -24,7 +25,7 @@ function dbMock(options:{status?:string;failMovement?:boolean;priorQty?:number}=
  return{db,getBalance:()=>balance};
 }
 const input={id:'ret1',returnNumber:'R-001',invoiceId:'inv-1',processedBy:'owner',destinationLocationId:'depot',reason:'damaged box',
- lines:[{id:'rl1',invoiceLineId:'il-1',quantity:1,condition:'sellable' as const}]};
+ lines:[{id:'rl1',invoiceLineId:'il-1',quantity:1,condition:'sellable' as const,batchId:'batch1'}]};
 describe('ReturnsRepository',()=>{
  it('returns sellable stock, reduces invoice balance and refunds only the overpayment',async()=>{
   const{db,getBalance}=dbMock();
@@ -50,6 +51,12 @@ describe('ReturnsRepository',()=>{
   await expect(new ReturnsRepository(db).complete(input)).rejects.toThrow('movement failed');
   expect(db.rollbackTransaction).toHaveBeenCalledOnce();
   expect(db.commitTransaction).not.toHaveBeenCalled();
+ });
+
+ it('requires a source batch allocation and rejects returns against an unrelated batch',async()=>{
+  const{db}=dbMock();
+  await expect(new ReturnsRepository(db).complete({...input,lines:[{...input.lines[0],batchId:null}]})).rejects.toThrow('كتفوت الكمية المباعة');
+  expect(db.rollbackTransaction).toHaveBeenCalledOnce();
  });
  it('rejects draft invoices and invalid quantities before any transaction',async()=>{
   const{db}=dbMock({status:'draft'});
