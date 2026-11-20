@@ -120,6 +120,37 @@ export default function App() {
     return () => { alive = false; };
   }, [refresh]);
 
+  async function setupOwnerPin(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    if(!isValidPin(setupPin)){setError('رمز PIN خاصو يكون من 4 حتى 8 أرقام.');return;}
+    if(setupPin!==setupPinConfirm){setError('تأكيد رمز PIN ما مطابقش.');return;}
+    setError('');setSaving(true);
+    try{
+      const db=await openAppDatabase(),credentials=await hashPin(setupPin);
+      await db.run('UPDATE users SET pin_salt=?,pin_hash=?,updated_at=? WHERE id=?',[credentials.salt,credentials.hash,new Date().toISOString(),'local-owner']);
+      const result=await db.query('SELECT id,display_name,phone,role,is_active,pin_salt,pin_hash FROM users WHERE id=?',['local-owner']);
+      const owner=result.values?.[0] as unknown as AuthUser;
+      if(!owner?.pin_hash)throw new Error('ما قدرناش نحفظو رمز الدخول.');
+      setAuthUsers(current=>current.map(user=>user.id===owner.id?owner:user));
+      setCurrentUser(owner);setSetupPin('');setSetupPinConfirm('');setAuthMode('login');
+      setNotice('تسجل رمز الدخول ديال المالك بنجاح.');
+    }catch(reason){setError(reason instanceof Error?reason.message:'تعذر إعداد رمز الدخول.');}
+    finally{setSaving(false);}
+  }
+
+  async function loginUser(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    const user=authUsers.find(item=>item.id===authUserId&&item.is_active===1);
+    if(!user?.pin_hash||!user.pin_salt){setError('هاد المستخدم ما عندوش رمز دخول مضبوط.');return;}
+    setError('');setSaving(true);
+    try{
+      if(!await verifyPin(authPin,user.pin_salt,user.pin_hash))throw new Error('رمز PIN غير صحيح.');
+      setCurrentUser(user);setAuthPin('');setNotice('مرحبا '+user.display_name+'.');
+    }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تسجيل الدخول.');}
+    finally{setSaving(false);}
+  }
+
+  function logoutUser(){setCurrentUser(null);setAuthPin('');setNotice('');setError('');}
   async function refreshDistributionOrders(db:Awaited<ReturnType<typeof openAppDatabase>>){
     const rows=await db.query(`SELECT o.id,o.order_number,c.name AS customer_name,u.display_name AS created_by_name,o.assigned_vehicle_id,v.label AS vehicle_label,o.status,o.total_minor,o.created_at FROM sales_orders o JOIN customers c ON c.id=o.customer_id JOIN users u ON u.id=o.created_by LEFT JOIN vehicles v ON v.id=o.assigned_vehicle_id ORDER BY o.created_at DESC LIMIT 100`);
     const orders=(rows.values??[]) as unknown as DistributionOrderRow[];
