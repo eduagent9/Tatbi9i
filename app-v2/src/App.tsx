@@ -111,7 +111,7 @@ export default function App() {
     setOrderDeliveryLines(Object.fromEntries(lineEntries));
     setDeliveryQuantities(current=>{
       const next={...current};
-      for(const [orderId,lines] of lineEntries)for(const line of lines){const key=orderId+':'+line.id;if(next[key]===undefined)next[key]=String(line.remaining_quantity);}
+      for(const [orderId,lines] of lineEntries)for(const line of lines){const key=orderId+':'+line.id;next[key]=String(line.remaining_quantity);}
       return next;
     });
   }
