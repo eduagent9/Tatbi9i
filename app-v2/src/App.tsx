@@ -39,7 +39,6 @@ export default function App() {
   const [cashCountedAmounts,setCashCountedAmounts]=useState<Record<string,string>>({});
   const [cashDiscrepancyReasons,setCashDiscrepancyReasons]=useState<Record<string,string>>({});
   const [orderCustomerId,setOrderCustomerId]=useState('');
-  const [orderCreatorId,setOrderCreatorId]=useState('');
   const [orderVehicleId,setOrderVehicleId]=useState('');
   const [deliveryCollectedAmount,setDeliveryCollectedAmount]=useState('0');
   const [orderLines,setOrderLines]=useState<Array<{productId:string;quantity:string}>>([{productId:'',quantity:'1'}]);
@@ -208,7 +207,7 @@ export default function App() {
       if(!Number.isSafeInteger(subtotal))throw new Error('مجموع الطلب كبير بزاف.');
       await db.beginTransaction();
       try{
-        await db.run('INSERT INTO sales_orders (id,order_number,customer_id,created_by,assigned_vehicle_id,status,subtotal_minor,offer_discount_minor,total_minor,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',[id,number,orderCustomerId,orderCreatorId,orderVehicleId||null,'submitted',subtotal,0,subtotal,now,now]);
+        await db.run('INSERT INTO sales_orders (id,order_number,customer_id,created_by,assigned_vehicle_id,status,subtotal_minor,offer_discount_minor,total_minor,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',[id,number,orderCustomerId,currentUser.id,orderVehicleId||null,'submitted',subtotal,0,subtotal,now,now]);
         for(const line of prepared)await db.run('INSERT INTO sales_order_lines (id,order_id,product_id,quantity,unit_price_minor,line_total_minor,product_name_snapshot,unit_snapshot) VALUES (?,?,?,?,?,?,?,?)',[crypto.randomUUID(),id,line.productId,line.quantity,line.price,line.total,line.name,line.unit]);
         await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),currentUser.id,'order.submitted','sales_order',id,JSON.stringify({number,subtotal,lines:prepared.length}),now]);
       await db.commitTransaction();
@@ -615,7 +614,7 @@ export default function App() {
           <div className="panel-heading"><div><h3>طلبات المحلات</h3><p>مندوب الطلبات يسجل طلب الزبون، والديبو يتابع التحضير والتجهيز</p></div><span className="step-mark">01</span></div>
           <form onSubmit={submitDistributionOrder}>
             <label>المحل / الزبون<select required value={orderCustomerId} onChange={e=>setOrderCustomerId(e.target.value)}><option value="">اختار المحل</option>{customers.map(customer=><option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
-            <div className="two-cols"><label>مندوب الطلبات<select required value={orderCreatorId} onChange={e=>setOrderCreatorId(e.target.value)}><option value="">اختار المندوب</option>{teamUsers.filter(user=>user.is_active===1&&user.role==='order_rep').map(user=><option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
+            <div className="two-cols"><label>مندوب الطلبات<input value={currentUser?.display_name??''} disabled /></label>
             <label>سيارة التوصيل (اختياري)<select value={orderVehicleId} onChange={e=>setOrderVehicleId(e.target.value)}><option value="">تتحدد لاحقاً</option>{teamVehicles.filter(vehicle=>vehicle.vehicle_type==='delivery').map(vehicle=><option key={vehicle.id} value={vehicle.id}>{vehicle.label} · {vehicle.assigned_name||'بدون سائق'}</option>)}</select></label></div>
             {orderLines.map((line,index)=><div className="sale-line" key={index}><label>المنتج<select required value={line.productId} onChange={e=>setOrderLines(current=>current.map((item,i)=>i===index?{...item,productId:e.target.value}:item))}><option value="">اختار المنتج</option>{products.map(product=><option key={product.id} value={product.id}>{product.name} · {formatMad(product.sale_price_minor)}</option>)}</select></label><label>الكمية المطلوبة<input required type="number" min="0.01" step="0.01" value={line.quantity} onChange={e=>setOrderLines(current=>current.map((item,i)=>i===index?{...item,quantity:e.target.value}:item))}/></label><button type="button" className="remove-line" disabled={orderLines.length===1} onClick={()=>setOrderLines(current=>current.filter((_,i)=>i!==index))}>حذف السطر</button></div>)}
             <button type="button" className="secondary-button" onClick={()=>setOrderLines(current=>[...current,{productId:'',quantity:'1'}])}>+ إضافة منتج للطلب</button>
