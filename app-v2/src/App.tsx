@@ -391,6 +391,8 @@ export default function App() {
       const db=await openAppDatabase(),now=new Date().toISOString();
       await db.beginTransaction();
       try{
+        const latest=await db.query('SELECT status FROM sales_orders WHERE id=?',[order.id]);
+        if(!latest.values?.[0]||String(latest.values[0].status)!==order.status)throw new Error('حالة الطلب تبدلات من طرف مستخدم آخر؛ حدّث اللائحة قبل المحاولة.');
         await db.run('UPDATE sales_orders SET status=?,updated_at=? WHERE id=? AND status=?',[next,now,order.id,order.status]);
         await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),currentUser?.id??'local-owner','order.status_changed','sales_order',order.id,JSON.stringify({from:order.status,to:next}),now]);
         await db.commitTransaction();
