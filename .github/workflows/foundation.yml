@@ -55,6 +55,7 @@ jobs:
           db.executescript((schema_dir / '003_purchases.sql').read_text(encoding='utf-8'))
           db.executescript((schema_dir / '004_local_owner.sql').read_text(encoding='utf-8'))
           db.executescript((schema_dir / '005_expenses.sql').read_text(encoding='utf-8'))
+          db.executescript((schema_dir / '005_expenses.sql').read_text(encoding='utf-8'))
           tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
           required = {'products', 'vehicles', 'stock_locations', 'stock_balances', 'stock_movements', 'invoices', 'invoice_lines', 'payments', 'cash_handovers', 'audit_events', 'sync_outbox', 'legacy_import_runs', 'purchase_receipts', 'purchase_receipt_lines', 'users', 'expenses'}
           missing = required - tables
