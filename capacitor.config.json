@@ -1,0 +1,9 @@
+{
+  "appId": "com.eduagent.tatbiqi",
+  "appName": "تطبيقي",
+  "webDir": "web",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": false
+  }
+}
