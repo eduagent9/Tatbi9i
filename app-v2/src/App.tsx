@@ -11,6 +11,7 @@ import { PurchaseRepository } from './data/purchases';
 import { ExpenseRepository } from './data/expenses';
 import { ReportsRepository, type FinancialSummary } from './data/reports';
 import { StockAndReturnsPanel } from './operations/StockAndReturnsPanel';
+import { DataBackupPanel } from './operations/DataBackupPanel';
 
 const emptyForm = { name: '', category: 'مواد غذائية', subcategory: '', unit: 'piece' as 'piece' | 'carton', pieces: '12', cost: '', price: '', threshold: '0', barcode: '' };
 
@@ -251,6 +252,7 @@ export default function App() {
           {visibleProducts.length === 0 ? <div className="empty-state"><span>📦</span><strong>ما كاين حتى منتج دابا</strong><p>بدا بإضافة أول منتج من الاستمارة.</p></div> : <div className="product-list">{visibleProducts.map(product => <article className="product-row" key={product.id}><div className="product-icon">▦</div><div className="product-info"><strong>{product.name}</strong><span>{product.category || 'بدون صنف'}{product.barcode ? ` · ${product.barcode}` : ''}</span></div><div className="product-numbers"><strong>{formatMad(product.sale_price_minor)}</strong><span>المخزون: {product.total_stock}</span></div></article>)}</div>}
         </section>
         <StockAndReturnsPanel />
+        <DataBackupPanel />
         <section className="panel stock-panel"><div className="panel-heading"><div><h3>حركة المخزون</h3><p>إدخال أو إخراج الكمية من المستودع الرئيسي</p></div><span className="step-mark">03</span></div>
           <form onSubmit={submitStock}>
             <label>المنتج<select required value={stockProductId} onChange={e => setStockProductId(e.target.value)}><option value="">اختار المنتج</option>{products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
