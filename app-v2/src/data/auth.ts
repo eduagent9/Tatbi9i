@@ -1,5 +1,5 @@
 const PBKDF2_ITERATIONS = 210_000;
-const PIN_PATTERN = /^\\d{4,8}$/;
+const PIN_PATTERN = /^\d{4,8}$/;
 
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
