@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { formatMad, madToMinorUnits } from './data/money';
+import { formatMad, formatSignedMad, madToMinorUnits } from './data/money';
 import { openAppDatabase } from './data/sqlite-database';
 import { ProductRepository, type ProductRecord } from './data/products';
 import { StockRepository, type ExpiryAlertRow } from './data/stock';
@@ -8,6 +8,8 @@ import { SalesRepository } from './data/sales';
 import { PaymentRepository, type OutstandingInvoice } from './data/payments';
 import { SupplierRepository, type SupplierRecord } from './data/suppliers';
 import { PurchaseRepository } from './data/purchases';
+import { ExpenseRepository } from './data/expenses';
+import { ReportsRepository, type FinancialSummary } from './data/reports';
 
 const emptyForm = { name: '', category: 'مواد غذائية', subcategory: '', unit: 'piece' as 'piece' | 'carton', pieces: '12', cost: '', price: '', threshold: '0', barcode: '' };
 
@@ -15,6 +17,10 @@ export default function App() {
   const [repository, setRepository] = useState<ProductRepository | null>(null);
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [expiryAlerts, setExpiryAlerts] = useState<ExpiryAlertRow[]>([]);
+  const [financialSummary, setFinancialSummary] = useState<FinancialSummary | null>(null);
+  const [expenseCategory, setExpenseCategory] = useState('نقل');
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseNote, setExpenseNote] = useState('');
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [outstandingInvoices, setOutstandingInvoices] = useState<OutstandingInvoice[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
@@ -58,7 +64,9 @@ export default function App() {
       setCustomers(await new CustomerRepository(db).list());
       setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
       setSuppliers(await new SupplierRepository(db).list());
+      setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
       setExpiryAlerts(await new StockRepository(db).getExpiryAlerts());
+      setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
     }).catch(reason => { if (alive) setError(reason instanceof Error ? reason.message : 'تعذر فتح قاعدة البيانات.'); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -100,6 +108,23 @@ export default function App() {
       setCustomerName(''); setCustomerPhone(''); setCustomerCity('');
       setNotice('تسجل الزبون بنجاح.');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر حفظ الزبون.'); }
+    finally { setSaving(false); }
+  }
+
+  async function submitExpense(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(''); setNotice(''); setSaving(true);
+    try {
+      const db = await openAppDatabase();
+      await new ExpenseRepository(db).create({
+        id: crypto.randomUUID(), expenseNumber: 'EXP-' + Date.now(),
+        category: expenseCategory, amountMinor: madToMinorUnits(Number(expenseAmount)),
+        paymentMethod: 'cash', paidBy: 'local-owner', note: expenseNote,
+      });
+      setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
+      setExpenseAmount(''); setExpenseNote('');
+      setNotice('تسجل المصروف وتحدث صافي الربح.');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر تسجيل المصروف.'); }
     finally { setSaving(false); }
   }
 
@@ -241,6 +266,25 @@ export default function App() {
             <button className="primary-button" disabled={saving}>{saving ? 'كيتم الحفظ...' : 'إضافة الزبون'}</button>
           </form>
           <div className="customer-list">{customers.length === 0 ? <p className="hint">مازال ما تسجل حتى زبون.</p> : customers.map(customer => <article className="customer-row" key={customer.id}><div><strong>{customer.name}</strong><span>{customer.phone || customer.city || 'بدون معلومات إضافية'}</span></div><div><strong>{formatMad(customer.debt_minor)}</strong><span>الدين · {customer.invoice_count} فاتورة</span></div></article>)}</div>
+        </section>
+        <section className="panel finance-panel"><div className="panel-heading"><div><h3>ملخص الحسابات</h3><p>إجمالي الفواتير المؤكدة منذ بداية الاستخدام</p></div><span className="step-mark">09</span></div>
+          {financialSummary ? <div className="finance-grid">
+            <article><span>المبيعات الصافية</span><strong>{formatMad(financialSummary.salesMinor)}</strong></article>
+            <article><span>تكلفة البضاعة المباعة</span><strong>{formatMad(financialSummary.costMinor)}</strong></article>
+            <article><span>الربح قبل المصاريف</span><strong>{formatSignedMad(financialSummary.grossProfitMinor)}</strong></article>
+            <article><span>مصاريف التشغيل</span><strong>{formatMad(financialSummary.expensesMinor)}</strong></article>
+            <article className="net-profit"><span>صافي الربح التقديري</span><strong>{formatSignedMad(financialSummary.netProfitMinor)}</strong></article>
+            <article><span>الديون المستحقة</span><strong>{formatMad(financialSummary.outstandingMinor)}</strong></article>
+          </div> : <p className="hint">الملخص المالي غير متوفر حالياً.</p>}
+          <p className="hint">الربح محسوب من تكلفة الشراء المحفوظة داخل كل فاتورة ناقص مصاريف التشغيل. مازال ما كيشملش المرتجعات أو الضرائب أو المصاريف غير المسجلة.</p>
+        </section>
+        <section className="panel expense-panel"><div className="panel-heading"><div><h3>مصاريف التشغيل</h3><p>سجل النقل والوقود والكراء والمصاريف الأخرى</p></div><span className="step-mark">10</span></div>
+          <form onSubmit={submitExpense}>
+            <label>تصنيف المصروف<select value={expenseCategory} onChange={e => setExpenseCategory(e.target.value)}><option>نقل</option><option>وقود</option><option>كراء</option><option>أجور</option><option>صيانة</option><option>اتصالات</option><option>مصاريف أخرى</option></select></label>
+            <label>المبلغ (DH)<input type="number" min="0.01" step="0.01" required value={expenseAmount} onChange={e => setExpenseAmount(e.target.value)} placeholder="0.00" /></label>
+            <label>ملاحظة<input value={expenseNote} onChange={e => setExpenseNote(e.target.value)} placeholder="اختياري" /></label>
+            <button className="primary-button" disabled={saving}>{saving ? 'كيتسجل المصروف...' : 'حفظ المصروف'}</button>
+          </form>
         </section>
         <section className="panel alerts-panel"><div className="panel-heading"><div><h3>تنبيهات المخزون والصلاحية</h3><p>مراقبة النقص والدفعات اللي قربات تسالي</p></div><span className="step-mark">08</span></div>
           <div className="alert-group"><h4>مخزون منخفض</h4>
