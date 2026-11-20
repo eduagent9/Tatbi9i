@@ -71,7 +71,7 @@ export class ReturnsRepository {
           if(!b.values?.length)throw new Error('دفعة الإرجاع لا تطابق المنتج.');
         }
         const allocation=await this.db.query(
-          `SELECT COALESCE(SUM(a.quantity),0) AS allocated_quantity,
+          `SELECT COUNT(*) AS allocation_count, COALESCE(SUM(a.quantity),0) AS allocated_quantity,
             COALESCE((SELECT SUM(rl.quantity) FROM product_return_lines rl
               JOIN product_returns r ON r.id=rl.return_id
               WHERE rl.invoice_line_id=? AND rl.batch_id IS ? AND r.status='completed'),0) AS returned_quantity
@@ -80,9 +80,17 @@ export class ReturnsRepository {
           [source.id,batchId,source.id,batchId],
         );
         const allocationRow=allocation.values?.[0];
-        const batchRemaining=Number(allocationRow?.allocated_quantity??0)-Number(allocationRow?.returned_quantity??0);
-        if(!Number.isFinite(batchRemaining)||line.quantity>batchRemaining+1e-9)
-          throw new RangeError('الكمية المرتجعة كتفوت الكمية المباعة من هاد الدفعة.');
+        const allocationCount=Number(allocationRow?.allocation_count??0);
+        if(!Number.isSafeInteger(allocationCount)||allocationCount<0)throw new Error('سجل تخصيص دفعات الفاتورة غير صالح.');
+        if(allocationCount===0){
+          // Compatibility for invoices created before batch-allocation migration 008.
+          // Their historical batch is unknown, so only a null-batch return is safe.
+          if(batchId!==null)throw new RangeError('هاد الفاتورة قديمة وما فيهاش تتبع الدفعات؛ اختار إرجاعاً بلا دفعة.');
+        }else{
+          const batchRemaining=Number(allocationRow?.allocated_quantity??0)-Number(allocationRow?.returned_quantity??0);
+          if(!Number.isFinite(batchRemaining)||line.quantity>batchRemaining+1e-9)
+            throw new RangeError('الكمية المرتجعة كتفوت الكمية المباعة من هاد الدفعة.');
+        }
 
         const cumulative=Math.round(Number(allocated.get(source.id))*((Number(source.returned_quantity)+line.quantity)/Number(source.quantity)));
         const lineValue=cumulative-Number(source.returned_value_minor);
