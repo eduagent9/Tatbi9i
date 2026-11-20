@@ -247,11 +247,11 @@ export default function App() {
             const destinationBalance=await db.query('SELECT id,quantity FROM stock_balances WHERE product_id=? AND variant_id IS ? AND location_id=? AND batch_id IS ? LIMIT 1',[line.product_id,line.variant_id??null,destination,balance.batch_id??null]);
             if(destinationBalance.values?.[0])await db.run('UPDATE stock_balances SET quantity=?,updated_at=? WHERE id=?',[Number(destinationBalance.values[0].quantity)+take,now,destinationBalance.values[0].id]);
             else await db.run("INSERT INTO stock_balances (id,product_id,variant_id,location_id,batch_id,quantity,updated_at) VALUES (?,?,?,?,?,?,?)",[crypto.randomUUID(),line.product_id,line.variant_id??null,destination,balance.batch_id??null,take,now]);
-            await db.run("INSERT INTO stock_movements (id,product_id,variant_id,batch_id,from_location_id,to_location_id,quantity,movement_type,reference_type,reference_id,performed_by,responsible_user_id,occurred_at,note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",[crypto.randomUUID(),line.product_id,line.variant_id??null,balance.batch_id??null,'loc-depot-main',destination,take,'load_vehicle','sales_order_load',order.id,'local-owner',String(driverId),now,'تحميل طلب '+order.order_number+' للسيارة']);
+            await db.run("INSERT INTO stock_movements (id,product_id,variant_id,batch_id,from_location_id,to_location_id,quantity,movement_type,reference_type,reference_id,performed_by,responsible_user_id,occurred_at,note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",[crypto.randomUUID(),line.product_id,line.variant_id??null,balance.batch_id??null,'loc-depot-main',destination,take,'load_vehicle','sales_order_load',order.id,currentUser?.id??'local-owner',String(driverId),now,'تحميل طلب '+order.order_number+' للسيارة']);
             remaining-=take;
           }
         }
-        await db.run("INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)",[crypto.randomUUID(),'local-owner','order.loaded_to_vehicle','sales_order',order.id,JSON.stringify({vehicleId:order.assigned_vehicle_id,lines:lines.values.length}),now]);
+        await db.run("INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)",[crypto.randomUUID(),currentUser?.id??'local-owner','order.loaded_to_vehicle','sales_order',order.id,JSON.stringify({vehicleId:order.assigned_vehicle_id,lines:lines.values.length}),now]);
         await db.commitTransaction();
       }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
       await refreshDistributionOrders(db);
@@ -484,7 +484,7 @@ export default function App() {
       await new ExpenseRepository(db).create({
         id: crypto.randomUUID(), expenseNumber: 'EXP-' + Date.now(),
         category: expenseCategory, amountMinor: madToMinorUnits(Number(expenseAmount)),
-        paymentMethod: 'cash', paidBy: 'local-owner', note: expenseNote,
+        paymentMethod: 'cash', paidBy: currentUser?.id??'local-owner', note: expenseNote,
       });
       setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
       setExpenseAmount(''); setExpenseNote('');
@@ -516,7 +516,7 @@ export default function App() {
       const db = await openAppDatabase();
       const result = await new PurchaseRepository(db).create({
         id: crypto.randomUUID(), receiptNumber: 'ACH-' + Date.now(),
-        supplierId: purchaseSupplierId, receivedBy: 'local-owner', locationId: 'loc-depot-main',
+        supplierId: purchaseSupplierId, receivedBy: currentUser?.id??'local-owner', locationId: 'loc-depot-main',
         lines: purchaseLines.map(line=>({
           productId:line.productId,quantity:Number(line.quantity),unitCostMinor:madToMinorUnits(Number(line.unitCost)),
           batchCode:line.batchCode||null,expiryDate:line.expiryDate||null,
@@ -543,7 +543,7 @@ export default function App() {
       const result = await new PaymentRepository(db).collect({
         id: crypto.randomUUID(), invoiceId: collectionInvoiceId,
         amountMinor: madToMinorUnits(Number(collectionAmount)),
-        method: 'cash', receivedBy: 'local-owner',
+        method: 'cash', receivedBy: currentUser?.id??'local-owner',
       });
       setCustomers(await new CustomerRepository(db).list());
       setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
@@ -565,7 +565,7 @@ export default function App() {
       const collectedMinor = madToMinorUnits(Number(saleCollected || 0));
       const result = await new SalesRepository(db).create({
         id: crypto.randomUUID(), invoiceNumber: 'T-' + Date.now(),
-        customerId: saleCustomerId, sellerUserId: 'local-owner', locationId: 'loc-depot-main',
+        customerId: saleCustomerId, sellerUserId: currentUser?.id??'local-owner', locationId: 'loc-depot-main',
         lines: saleLines.map(line=>({productId:line.productId,quantity:Number(line.quantity)})),
         discountMinor, collectedMinor, paymentMethod: 'cash',
       });
