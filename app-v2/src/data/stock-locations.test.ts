@@ -15,9 +15,9 @@ describe('StockLocationRepository',()=>{
   expect(db.commitTransaction).toHaveBeenCalledOnce();
  });
  it('creates a vehicle record and its linked stock location',async()=>{
-  const db=dbMock();const result=await new StockLocationRepository(db).create({id:'loc-van-1',label:'سيارة التوزيع 1',kind:'vehicle',vehicleCode:'VAN-01',createdBy:'local-owner'});
+  const db=dbMock();const result=await new StockLocationRepository(db,()=> '2026-11-20T12:00:00Z').create({id:'loc-van-1',label:'سيارة التوزيع 1',kind:'vehicle',vehicleCode:'VAN-01',createdBy:'local-owner'});
   expect(result.vehicleId).toBe('loc-van-1:vehicle');
-  expect(db.run).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO vehicles'),['loc-van-1:vehicle','VAN-01','سيارة التوزيع 1','van_sales','2026-11-20T00:00:00.000Z','2026-11-20T00:00:00.000Z']);
+  expect(db.run).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO vehicles'),['loc-van-1:vehicle','VAN-01','سيارة التوزيع 1','van_sales','2026-11-20T12:00:00Z','2026-11-20T12:00:00Z']);
   expect(db.commitTransaction).toHaveBeenCalledOnce();
  });
  it('rolls back if location creation fails',async()=>{
