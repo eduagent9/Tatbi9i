@@ -12,3 +12,9 @@ export function minorUnitsToMad(amountMinor:number):number {
 export function formatMad(amountMinor:number,locale='ar-MA'):string {
  return new Intl.NumberFormat(locale,{style:'currency',currency:'MAD',minimumFractionDigits:2,maximumFractionDigits:2}).format(minorUnitsToMad(amountMinor));
 }
+
+/** Formats signed financial totals, including a negative net profit. */
+export function formatSignedMad(amountMinor:number,locale='ar-MA'):string {
+ if(!Number.isSafeInteger(amountMinor)) throw new RangeError('القيمة المالية خاصها تكون عدداً صحيحاً بالسنتيم.');
+ return new Intl.NumberFormat(locale,{style:'currency',currency:'MAD',minimumFractionDigits:2,maximumFractionDigits:2}).format(amountMinor/100);
+}
