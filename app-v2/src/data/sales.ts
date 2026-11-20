@@ -88,6 +88,7 @@ export class SalesRepository {
         if (totalAvailable + 1e-9 < line.quantity) throw new Error('المخزون غير كافٍ للمنتج: ' + line.product.name);
 
         let remaining = line.quantity;
+        const allocations: Array<{ batchId: string | null; quantity: number; unitCostMinor: number }> = [];
         for (const balance of available) {
           if (remaining <= 1e-9) break;
           const take = Math.min(remaining,Number(balance.quantity));
@@ -98,15 +99,24 @@ export class SalesRepository {
              VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
             [this.makeId(),line.product.id,line.variantId,balance.batch_id,locationId,null,take,'sale','invoice',invoiceId,timestamp,'بيع من الفاتورة '+invoiceNumber],
           );
+          allocations.push({ batchId: balance.batch_id, quantity: take, unitCostMinor: money(Number(line.product.purchase_cost_minor), 'تكلفة الشراء') });
           remaining -= take;
         }
 
+        const invoiceLineId = this.makeId();
         await this.db.run(
           `INSERT INTO invoice_lines
            (id,invoice_id,product_id,variant_id,quantity,unit_price_minor,unit_cost_minor,line_total_minor,product_name_snapshot,unit_snapshot)
            VALUES (?,?,?,?,?,?,?,?,?,?)`,
-          [this.makeId(),invoiceId,line.product.id,line.variantId,line.quantity,line.unitPrice,money(Number(line.product.purchase_cost_minor),'تكلفة الشراء'),line.lineTotal,line.product.name,line.product.base_unit],
+          [invoiceLineId,invoiceId,line.product.id,line.variantId,line.quantity,line.unitPrice,money(Number(line.product.purchase_cost_minor),'تكلفة الشراء'),line.lineTotal,line.product.name,line.product.base_unit],
         );
+        for (const allocation of allocations) {
+          await this.db.run(
+            `INSERT INTO invoice_line_batch_allocations (id,invoice_line_id,batch_id,quantity,unit_cost_minor)
+             VALUES (?,?,?,?,?)`,
+            [this.makeId(),invoiceLineId,allocation.batchId,allocation.quantity,allocation.unitCostMinor],
+          );
+        }
       }
 
       if (collectedMinor > 0) {
