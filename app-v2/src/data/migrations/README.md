@@ -32,3 +32,7 @@ Never delete confirmed financial or stock history. Corrections must be represent
 - Preserve the original JSON backup unchanged outside this database.
 - No import should start until a dry-run report reconciles counts, totals, links, payments, returns, and purchase history.
 - Runtime persistence, backup/restore, and SQLCipher/plugin licensing still require validation on a real Android device.
+
+6. `006_stock_counts.sql`: stocktake headers and lines.
+7. `007_return_traceability.sql`: invoice-line and batch references on returns.
+8. `008_invoice_batch_allocations.sql`: records the exact FEFO batch quantities consumed by every invoice line, so later returns can be traced to the original batch.
