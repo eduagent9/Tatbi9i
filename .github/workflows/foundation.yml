@@ -48,7 +48,7 @@ jobs:
           db.execute('PRAGMA foreign_keys = ON')
           db.executescript((schema_dir / '001_initial_schema.sql').read_text(encoding='utf-8'))
           db.executescript((schema_dir / '002_default_depot.sql').read_text(encoding='utf-8'))
-db.executescript((schema_dir / '003_purchases.sql').read_text(encoding='utf-8'))
+          db.executescript((schema_dir / '003_purchases.sql').read_text(encoding='utf-8'))
           tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
           required = {'products', 'vehicles', 'stock_locations', 'stock_balances', 'stock_movements', 'invoices', 'invoice_lines', 'payments', 'cash_handovers', 'audit_events', 'sync_outbox', 'legacy_import_runs', 'purchase_receipts', 'purchase_receipt_lines'}
           missing = required - tables
