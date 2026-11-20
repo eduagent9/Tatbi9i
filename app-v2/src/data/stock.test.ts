@@ -59,6 +59,17 @@ describe('StockRepository', () => {
     expect(db.query).toHaveBeenCalledWith(expect.stringContaining('ORDER BY sm.occurred_at DESC'),[10]);
   });
 
+  it('transfers a batch between locations atomically and preserves traceability', async () => {
+    const {db,balances}=stockDb(10); const repo=new StockRepository(db,()=> '2026-11-20T12:00:00.000Z');
+    await repo.record({id:'transfer-1',productId:'p1',variantId:'v1',batchId:'batch-1',
+      fromLocationId:'depot',toLocationId:'vehicle-1',quantity:4,movementType:'transfer',performedBy:'local-owner'});
+    expect(balances.get('depot')?.quantity).toBe(6);
+    expect(balances.get('vehicle-1')?.quantity).toBe(4);
+    expect(db.run).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO stock_movements'),
+      expect.arrayContaining(['batch-1','depot','vehicle-1',4,'transfer']));
+    expect(db.commitTransaction).toHaveBeenCalledOnce();
+  });
+
   it('rejects zero quantity and identical transfer locations', async () => {
     const repo=new StockRepository(stockDb().db);
     await expect(repo.record({id:'m4',productId:'p1',toLocationId:'depot',quantity:0,movementType:'opening'})).rejects.toThrow(RangeError);
