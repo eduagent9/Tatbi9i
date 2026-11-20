@@ -34,6 +34,36 @@ jobs:
           for (const token of ['function checkout(', 'function saveReturn(', 'function saveDebtPayment(', 'function savePurchase(', 'function saveStockCount(', 'function expiryDays(', 'function backup()', 'function restore(']) {
             if (!html.includes(token)) throw new Error('Missing core feature: ' + token);
           }
+          const vm = require('vm');
+          function extractFunction(source, name) {
+            const start = source.indexOf('function ' + name + '(');
+            if (start < 0) throw new Error('Missing testable function: ' + name);
+            const open = source.indexOf('{', start);
+            let depth = 0, quote = '', escaped = false;
+            for (let i = open; i < source.length; i++) {
+              const c = source[i];
+              if (quote) {
+                if (escaped) escaped = false;
+                else if (c === '\\\\') escaped = true;
+                else if (c === quote) quote = '';
+                continue;
+              }
+              if (c === "'" || c === '"' || c === '`') { quote = c; continue; }
+              if (c === '{') depth++;
+              if (c === '}' && --depth === 0) return source.slice(start, i + 1);
+            }
+            throw new Error('Unclosed function: ' + name);
+          }
+          const context = { Date, Math, String, Number };
+          vm.createContext(context);
+          vm.runInContext(extractFunction(scripts[0][1], 'expiryDays') + ';' + extractFunction(scripts[0][1], 'reportMonth'), context);
+          const expiry = context.expiryDays;
+          if (expiry('2026-02-30') !== null || expiry('not-a-date') !== null || expiry('') !== null) throw new Error('Expiry validation accepted an invalid date');
+          const today = new Date();
+          const todayIso = [today.getFullYear(), String(today.getMonth()+1).padStart(2,'0'), String(today.getDate()).padStart(2,'0')].join('-');
+          if (expiry(todayIso) !== 0) throw new Error('Expiry calculation failed for today');
+          if (context.reportMonth('20/11/2026, 10:30:00') !== '2026-11' || context.reportMonth('2026-04-15') !== '2026-04' || context.reportMonth('unknown') !== '') throw new Error('Monthly report date parsing failed');
+          console.log('Business logic checks passed: strict expiry dates and monthly date parsing.');
           console.log('Static checks passed: JavaScript syntax, unique HTML IDs, core workflows.');
           NODE
       - name: Configure Pages
