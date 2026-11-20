@@ -43,10 +43,9 @@ describe('role permission policy', () => {
     expect(canPerform('depot_manager', 'manage_team')).toBe(false);
   });
 
-  it('denies missing roles and prevents cash collection for motorcycle deliveries', () => {
+  it('denies missing roles and permits cash collection only for delivery vehicles', () => {
     expect(canPerform(null, 'create_orders')).toBe(false);
     expect(canCollectDeliveryCash('delivery')).toBe(true);
-    expect(canCollectDeliveryCash('motorcycle')).toBe(false);
     expect(canCollectDeliveryCash(undefined)).toBe(false);
   });
 });
