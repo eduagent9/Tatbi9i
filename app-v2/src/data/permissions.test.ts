@@ -38,6 +38,8 @@ describe('role permission policy', () => {
   it('allows depot managers to prepare stock and reconcile cash, not manage staff', () => {
     expect(canPerform('depot_manager', 'prepare_orders')).toBe(true);
     expect(canPerform('depot_manager', 'reconcile_cash')).toBe(true);
+    expect(canPerform('depot_manager', 'create_depot_sales')).toBe(true);
+    expect(canPerform('depot_manager', 'collect_customer_debt')).toBe(true);
     expect(canPerform('depot_manager', 'manage_team')).toBe(false);
   });
 
