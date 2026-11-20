@@ -7,6 +7,7 @@ import initialSchema from './migrations/001_initial_schema.sql?raw';
 import defaultDepot from './migrations/002_default_depot.sql?raw';
 import purchasesSchema from './migrations/003_purchases.sql?raw';
 import localOwner from './migrations/004_local_owner.sql?raw';
+import expensesSchema from './migrations/005_expenses.sql?raw';
 
 export interface SqliteExecutor {
   execute(statement: string): Promise<unknown>;
@@ -34,6 +35,7 @@ export const APP_MIGRATIONS: Migration[] = [
   { version: 2, name: 'default_depot', sql: defaultDepot },
   { version: 3, name: 'purchases', sql: purchasesSchema },
   { version: 4, name: 'local_owner_profile', sql: localOwner },
+  { version: 5, name: 'expenses', sql: expensesSchema },
 ];
 
 export async function applyMigrations(
