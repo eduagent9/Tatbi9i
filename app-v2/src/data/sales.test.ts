@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { SqliteExecutor } from './sqlite-database';
 import { SalesRepository } from './sales';
 
-function fakeDb(stock: number[] = [10]) {
+function fakeDb(stock: number[] = [10], failMovement = false) {
   const balances = stock.map((quantity,index)=>({id:'b'+index,batch_id:'batch'+index,quantity,expiry_date:index===0?'2027-01-01':'2027-06-01'}));
   const calls: Array<{sql:string;values?:unknown[]}> = [];
   const db: SqliteExecutor = {
@@ -14,6 +14,7 @@ function fakeDb(stock: number[] = [10]) {
     }),
     run: vi.fn(async (sql:string,values?:unknown[]) => {
       calls.push({sql,values});
+      if (failMovement && sql.includes('INSERT INTO stock_movements')) throw new Error('movement insert failed');
       if (sql.includes('UPDATE stock_balances')) {
         const row=balances.find(x=>x.id===values?.[2]); if(row) row.quantity=Number(values?.[0]);
       }
@@ -60,6 +61,13 @@ describe('SalesRepository',()=>{
     const {db}=fakeDb();
     await expect(new SalesRepository(db).create({...base,collectedMinor:351*3})).rejects.toThrow('المبلغ المؤدى');
     expect(db.beginTransaction).not.toHaveBeenCalled();
+  });
+
+  it('rolls back invoice and stock work if a movement cannot be recorded',async()=>{
+    const {db}=fakeDb([10],true);
+    await expect(new SalesRepository(db).create(base)).rejects.toThrow('movement insert failed');
+    expect(db.rollbackTransaction).toHaveBeenCalledOnce();
+    expect(db.commitTransaction).not.toHaveBeenCalled();
   });
 
   it('rejects empty and non-positive invoice lines',async()=>{
