@@ -13,6 +13,6 @@
 - `suppliers.ts` creates and searches suppliers; supplier purchase totals are derived from receipt history.
 - `purchases.ts` records supplier receipts, immutable purchase-line snapshots, optional expiry batches, stock balances/movements, weighted average purchase cost, and audit history in one transaction. Migration 003 adds the purchase receipt tables without editing shipped migrations.
 - Migration 004 seeds a local owner profile (`local-owner`) for the single-device first-run sales flow. This is an operational profile only, not a login or access-control system.
-- The current screen exposes basic customer creation and a single-product invoice flow with optional discount and partial cash collection. Multi-line cart editing, receipt printing, and later debt collection remain to be connected.
+- The current screen exposes basic customer creation, a single-product invoice flow with optional discount and partial cash collection, and later cash collection against outstanding confirmed invoices. Multi-line cart editing, receipt printing, and non-cash collection methods remain to be connected.
 - Legacy dry-run and validation modules are read-only. No import is started automatically.
 - The first schema is still a foundation draft. Runtime validation on a real Android device, backup/restore, and the SQLCipher/plugin licensing review remain release gates.
