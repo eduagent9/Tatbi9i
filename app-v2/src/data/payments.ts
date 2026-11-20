@@ -9,6 +9,12 @@ export interface InvoiceBalance {
   invoiceId: string; customerId: string; totalMinor: number; collectedMinor: number; dueMinor: number;
   status: 'confirmed' | 'partially_returned' | 'returned';
 }
+
+export interface OutstandingInvoice {
+  invoiceId:string; invoiceNumber:string; customerId:string; customerName:string;
+  totalMinor:number; collectedMinor:number; dueMinor:number;
+}
+
 function required(value:string,label:string):string {
   const clean=value.trim(); if(!clean) throw new Error(label+' مطلوب.'); return clean;
 }
@@ -24,6 +30,19 @@ export class PaymentRepository {
     private readonly now:()=>string=()=>new Date().toISOString(),
     private readonly makeId:()=>string=()=>crypto.randomUUID(),
   ) {}
+
+  async listOutstanding():Promise<OutstandingInvoice[]> {
+    const result=await this.db.query(
+      `SELECT i.id AS invoiceId,i.invoice_number AS invoiceNumber,i.customer_id AS customerId,c.name AS customerName,
+       i.total_minor AS totalMinor,i.collected_minor AS collectedMinor,
+       (i.total_minor-i.collected_minor) AS dueMinor
+       FROM invoices i JOIN customers c ON c.id=i.customer_id
+       WHERE i.confirmed_at IS NOT NULL AND i.status NOT IN ('returned','voided')
+         AND i.total_minor>i.collected_minor
+       ORDER BY i.created_at DESC,i.invoice_number DESC`,
+    );
+    return (result.values??[]) as unknown as OutstandingInvoice[];
+  }
 
   async getInvoiceBalance(invoiceId:string):Promise<InvoiceBalance> {
     const id=required(invoiceId,'معرّف الفاتورة');
