@@ -5,5 +5,9 @@
 - The web preview intentionally reports that persistent SQLite is unavailable; it does not silently fall back to localStorage or pretend data is saved.
 - `sqlite-database.ts` owns the native connection and sequential, transactional schema migration runner.
 - Migration versions are append-only. Never edit a migration that may already have shipped; add the next numbered migration instead.
-- The first schema is still a foundation draft. Runtime validation on a real Android device, backup/restore, and the SQLCipher/plugin licensing review remain release gates.
+- `products.ts` creates products and barcode records in one transaction.
+- `stock.ts` records stock movements and balance changes in one transaction.
+- `sales.ts` creates confirmed invoices, immutable line snapshots, partial/full collections, stock deductions, stock movement history, and audit events in one transaction. It selects expiring batches first when expiry dates are available.
+- Sales and stock repositories are service-layer foundations; the current screen does not yet expose the full invoice workflow.
 - Legacy dry-run and validation modules are read-only. No import is started automatically.
+- The first schema is still a foundation draft. Runtime validation on a real Android device, backup/restore, and the SQLCipher/plugin licensing review remain release gates.
