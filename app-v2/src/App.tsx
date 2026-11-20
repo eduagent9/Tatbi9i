@@ -33,6 +33,8 @@ export default function App() {
   const [handoverSessionId,setHandoverSessionId]=useState('');
   const [handoverReceiverId,setHandoverReceiverId]=useState('');
   const [handoverAmount,setHandoverAmount]=useState('');
+  const [cashCountedAmounts,setCashCountedAmounts]=useState<Record<string,string>>({});
+  const [cashDiscrepancyReasons,setCashDiscrepancyReasons]=useState<Record<string,string>>({});
   const [orderCustomerId,setOrderCustomerId]=useState('');
   const [orderCreatorId,setOrderCreatorId]=useState('');
   const [orderVehicleId,setOrderVehicleId]=useState('');
@@ -126,7 +128,7 @@ export default function App() {
     const result=await db.query(`SELECT cs.id,cs.user_id,u.display_name AS user_name,v.label AS vehicle_label,cs.expected_cash_minor,
       COALESCE((SELECT SUM(ch.amount_minor) FROM cash_handovers ch WHERE ch.session_id=cs.id),0) AS handed_cash_minor,cs.status
       FROM cash_sessions cs JOIN users u ON u.id=cs.user_id LEFT JOIN vehicles v ON v.id=cs.vehicle_id
-      WHERE cs.status IN ('open','submitted') ORDER BY cs.opened_at DESC LIMIT 100`);
+      ORDER BY cs.opened_at DESC LIMIT 100`);
     setCashSessions((result.values??[]) as unknown as CashSessionRow[]);
   }
 
@@ -279,6 +281,27 @@ export default function App() {
       }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
       await refreshCashSessions(db);setHandoverAmount('');setNotice('تسجل وصل تسليم النقدية '+receipt+' بقيمة '+formatMad(amount)+'.');
     }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تسجيل تسليم النقدية.');}
+    finally{setSaving(false);}
+  }
+
+  async function reconcileCashSession(session:CashSessionRow){
+    if(session.status!=='submitted'){setError('خاص جلسة النقدية تكون تسلمات قبل المطابقة.');return;}
+    const counted=madToMinorUnits(Number(cashCountedAmounts[session.id]??''));
+    const difference=counted-Number(session.expected_cash_minor);
+    const reason=(cashDiscrepancyReasons[session.id]??'').trim();
+    if(!Number.isSafeInteger(counted)||counted<0){setError('دخل المبلغ اللي تعدّ فعلياً فالديبو.');return;}
+    if(difference!==0&&!reason){setError('كتب سبب الفرق بين المبلغ المتوقع والمبلغ المعدود.');return;}
+    setError('');setNotice('');setSaving(true);
+    try{
+      const db=await openAppDatabase(),now=new Date().toISOString();
+      await db.beginTransaction();
+      try{
+        await db.run("UPDATE cash_sessions SET counted_cash_minor=?,discrepancy_reason=?,status='reconciled' WHERE id=? AND status='submitted'",[counted,reason||null,session.id]);
+        await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),'local-owner','cash.reconciled','cash_session',session.id,JSON.stringify({expectedMinor:session.expected_cash_minor,countedMinor:counted,differenceMinor:difference,reason}),now]);
+        await db.commitTransaction();
+      }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
+      await refreshCashSessions(db);setNotice(difference===0?'تطابقت جلسة النقدية بنجاح.':'تسجلات المطابقة مع فرق '+formatSignedMad(difference)+' وسبب الفرق.');
+    }catch(reason){setError(reason instanceof Error?reason.message:'تعذر إتمام مطابقة النقدية.');}
     finally{setSaving(false);}
   }
 
@@ -666,7 +689,7 @@ export default function App() {
             <button className="primary-button" disabled={saving||cashSessions.every(session=>session.status!=='open')||teamUsers.every(user=>user.is_active!==1||(user.role!=='owner'&&user.role!=='depot_manager'))}>تأكيد تسليم النقدية وإصدار الوصل</button>
           </form>
           <div className="section-divider"></div><h4>جلسات التحصيل</h4>
-          {cashSessions.length===0?<p className="hint">مازال ما تسجل حتى تحصيل نقدي من عمليات التوصيل.</p>:cashSessions.map(session=><article className="team-row" key={session.id}><div><strong>{session.user_name} · {session.vehicle_label||'بدون سيارة'}</strong><span>المفروض: {formatMad(session.expected_cash_minor)} · تسلم: {formatMad(session.handed_cash_minor)} · باقي: {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</span><span>الحالة: {session.status==='open'?'مفتوحة':session.status==='submitted'?'تسلمات للديبو':'تمت المطابقة'}</span></div></article>)}
+          {cashSessions.length===0?<p className="hint">مازال ما تسجل حتى تحصيل نقدي من عمليات التوصيل.</p>:cashSessions.map(session=><article className="team-row" key={session.id}><div><strong>{session.user_name} · {session.vehicle_label||'بدون سيارة'}</strong><span>المفروض: {formatMad(session.expected_cash_minor)} · تسلم: {formatMad(session.handed_cash_minor)} · باقي: {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</span><span>الحالة: {session.status==='open'?'مفتوحة':session.status==='submitted'?'تسلمات للديبو':'تمت المطابقة'}</span>{session.status==='submitted'&&<div className="order-actions"><label>النقد المعدود فعلياً (DH)<input type="number" min="0" step="0.01" value={cashCountedAmounts[session.id]??''} onChange={e=>setCashCountedAmounts(current=>({...current,[session.id]:e.target.value}))}/></label><label>سبب الفرق إذا ما تطابقش<input value={cashDiscrepancyReasons[session.id]??''} onChange={e=>setCashDiscrepancyReasons(current=>({...current,[session.id]:e.target.value}))} placeholder="مثلاً: نقص نقدي أو خطأ فالعد"/></label><button type="button" className="secondary-button" disabled={saving} onClick={()=>reconcileCashSession(session)}>تأكيد المطابقة</button></div>}</div></article>)}
         </section>
       </div>}
       <footer>تطبيقي · بيانات التطوير محلية على الجهاز · لا تستعملها للمحاسبة الفعلية بعد</footer>
