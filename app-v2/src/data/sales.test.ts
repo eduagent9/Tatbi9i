@@ -74,6 +74,22 @@ describe('SalesRepository',()=>{
     expect(db.commitTransaction).not.toHaveBeenCalled();
   });
 
+  it('can participate in a caller-owned transaction without committing or rolling it back',async()=>{
+    const {db}=fakeDb([10]);
+    const repo=new SalesRepository(db);
+    await repo.create(base,'external');
+    expect(db.beginTransaction).not.toHaveBeenCalled();
+    expect(db.commitTransaction).not.toHaveBeenCalled();
+    expect(db.rollbackTransaction).not.toHaveBeenCalled();
+  });
+
+  it('does not roll back a caller-owned transaction when sale work fails',async()=>{
+    const {db}=fakeDb([2]);
+    await expect(new SalesRepository(db).create({...base,lines:[{productId:'p1',quantity:3}]},'external')).rejects.toThrow('المخزون غير كافٍ');
+    expect(db.beginTransaction).not.toHaveBeenCalled();
+    expect(db.rollbackTransaction).not.toHaveBeenCalled();
+  });
+
   it('rejects empty and non-positive invoice lines',async()=>{
     const {db}=fakeDb();
     await expect(new SalesRepository(db).create({...base,lines:[]})).rejects.toThrow('منتج واحد');
