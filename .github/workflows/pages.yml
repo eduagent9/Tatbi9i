@@ -63,6 +63,7 @@ jobs:
           const todayIso = [today.getFullYear(), String(today.getMonth()+1).padStart(2,'0'), String(today.getDate()).padStart(2,'0')].join('-');
           if (expiry(todayIso) !== 0) throw new Error('Expiry calculation failed for today');
           if (context.reportMonth('20/11/2026, 10:30:00') !== '2026-11' || context.reportMonth('2026-04-15') !== '2026-04' || context.reportMonth('unknown') !== '') throw new Error('Monthly report date parsing failed');
+          if (context.reportMonth('31/02/2026') !== '' || context.reportMonth('20/99/2026') !== '' || context.reportMonth('2026-13-01') !== '' || context.reportMonth('2026-11') !== '2026-11') throw new Error('Monthly report accepted an invalid date');
           console.log('Business logic checks passed: strict expiry dates and monthly date parsing.');
           console.log('Static checks passed: JavaScript syntax, unique HTML IDs, core workflows.');
           NODE
