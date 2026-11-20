@@ -15,9 +15,20 @@ export class ReportsRepository {
        WHERE confirmed_at IS NOT NULL AND status NOT IN ('voided','returned')`,
     );
     const costs=await this.db.query(
-      `SELECT COALESCE(SUM(MAX(0,il.quantity-COALESCE((SELECT SUM(rl.quantity) FROM product_return_lines rl
-         JOIN product_returns r ON r.id=rl.return_id WHERE rl.invoice_line_id=il.id AND r.status='completed'
-           AND rl.condition='sellable'),0))*il.unit_cost_minor),0) AS cost_minor
+      `SELECT COALESCE(SUM(
+         CASE WHEN EXISTS (SELECT 1 FROM invoice_line_batch_allocations ax WHERE ax.invoice_line_id=il.id)
+           THEN (SELECT COALESCE(SUM(MAX(0,a.quantity-COALESCE((
+             SELECT SUM(rl.quantity) FROM product_return_lines rl
+             JOIN product_returns r ON r.id=rl.return_id
+             WHERE rl.invoice_line_id=il.id AND rl.batch_id IS a.batch_id
+               AND rl.condition='sellable' AND r.status='completed'
+           ),0))*a.unit_cost_minor),0)
+             FROM invoice_line_batch_allocations a WHERE a.invoice_line_id=il.id)
+           ELSE MAX(0,il.quantity-COALESCE((SELECT SUM(rl.quantity) FROM product_return_lines rl
+             JOIN product_returns r ON r.id=rl.return_id WHERE rl.invoice_line_id=il.id
+               AND r.status='completed' AND rl.condition='sellable'),0))*il.unit_cost_minor
+         END
+       ),0) AS cost_minor
        FROM invoice_lines il JOIN invoices i ON i.id=il.invoice_id
        WHERE i.confirmed_at IS NOT NULL AND i.status NOT IN ('voided','returned')`,
     );
