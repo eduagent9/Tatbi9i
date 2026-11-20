@@ -3,12 +3,23 @@ import { formatMad, madToMinorUnits } from './data/money';
 import { openAppDatabase } from './data/sqlite-database';
 import { ProductRepository, type ProductRecord } from './data/products';
 import { StockRepository } from './data/stock';
+import { CustomerRepository, type CustomerRecord } from './data/customers';
+import { SalesRepository } from './data/sales';
 
 const emptyForm = { name: '', category: 'مواد غذائية', subcategory: '', unit: 'piece' as 'piece' | 'carton', pieces: '12', cost: '', price: '', threshold: '0', barcode: '' };
 
 export default function App() {
   const [repository, setRepository] = useState<ProductRepository | null>(null);
   const [products, setProducts] = useState<ProductRecord[]>([]);
+  const [customers, setCustomers] = useState<CustomerRecord[]>([]);
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerCity, setCustomerCity] = useState('');
+  const [saleCustomerId, setSaleCustomerId] = useState('');
+  const [saleProductId, setSaleProductId] = useState('');
+  const [saleQuantity, setSaleQuantity] = useState('1');
+  const [saleDiscount, setSaleDiscount] = useState('0');
+  const [saleCollected, setSaleCollected] = useState('');
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -28,6 +39,7 @@ export default function App() {
       const repo = new ProductRepository(db);
       setRepository(repo);
       await refresh(repo);
+      setCustomers(await new CustomerRepository(db).list());
     }).catch(reason => { if (alive) setError(reason instanceof Error ? reason.message : 'تعذر فتح قاعدة البيانات.'); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -54,6 +66,45 @@ export default function App() {
       });
       await refresh(repository); setStockQuantity('1'); setNotice('تسجلات حركة المخزون بنجاح.');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر تسجيل الحركة.'); }
+    finally { setSaving(false); }
+  }
+
+  async function submitCustomer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(''); setNotice(''); setSaving(true);
+    try {
+      const db = await openAppDatabase();
+      await new CustomerRepository(db).create({
+        id: crypto.randomUUID(), name: customerName, phone: customerPhone, city: customerCity,
+      });
+      setCustomers(await new CustomerRepository(db).list());
+      setCustomerName(''); setCustomerPhone(''); setCustomerCity('');
+      setNotice('تسجل الزبون بنجاح.');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر حفظ الزبون.'); }
+    finally { setSaving(false); }
+  }
+
+  async function submitSale(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!saleCustomerId || !saleProductId) { setError('اختار الزبون والمنتج أولاً.'); return; }
+    setError(''); setNotice(''); setSaving(true);
+    try {
+      const db = await openAppDatabase();
+      const quantity = Number(saleQuantity);
+      const discountMinor = madToMinorUnits(Number(saleDiscount || 0));
+      const collectedMinor = madToMinorUnits(Number(saleCollected || 0));
+      const result = await new SalesRepository(db).create({
+        id: crypto.randomUUID(), invoiceNumber: 'T-' + Date.now(),
+        customerId: saleCustomerId, sellerUserId: 'local-owner', locationId: 'loc-depot-main',
+        lines: [{ productId: saleProductId, quantity }],
+        discountMinor, collectedMinor, paymentMethod: 'cash',
+      });
+      const repo = repository ?? new ProductRepository(db);
+      await refresh(repo);
+      setCustomers(await new CustomerRepository(db).list());
+      setSaleQuantity('1'); setSaleDiscount('0'); setSaleCollected('');
+      setNotice('تسجلات الفاتورة ' + result.invoiceNumber + ' بنجاح. المتبقي على الزبون: ' + formatMad(result.dueMinor));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر تسجيل الفاتورة.'); }
     finally { setSaving(false); }
   }
 
@@ -103,6 +154,24 @@ export default function App() {
             <button className="primary-button" disabled={saving || products.length === 0}>{saving ? 'كيتم التسجيل...' : 'تسجيل حركة المخزون'}</button>
           </form>
           <p className="hint">أي إخراج بكمية أكبر من المخزون المتوفر غادي يترفض. كل حركة كتتسجل مع تحديث الرصيد داخل نفس المعاملة.</p>
+        </section>
+        <section className="panel customer-panel"><div className="panel-heading"><div><h3>الزبناء والديون</h3><p>الدين محسوب مباشرة من الفواتير المؤكدة</p></div><span className="step-mark">04</span></div>
+          <form onSubmit={submitCustomer}>
+            <label>اسم الزبون<input required value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="اسم المحل أو الزبون" /></label>
+            <div className="two-cols"><label>الهاتف<input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="اختياري" /></label><label>المدينة<input value={customerCity} onChange={e => setCustomerCity(e.target.value)} placeholder="مثلاً برشيد" /></label></div>
+            <button className="primary-button" disabled={saving}>{saving ? 'كيتم الحفظ...' : 'إضافة الزبون'}</button>
+          </form>
+          <div className="customer-list">{customers.length === 0 ? <p className="hint">مازال ما تسجل حتى زبون.</p> : customers.map(customer => <article className="customer-row" key={customer.id}><div><strong>{customer.name}</strong><span>{customer.phone || customer.city || 'بدون معلومات إضافية'}</span></div><div><strong>{formatMad(customer.debt_minor)}</strong><span>الدين · {customer.invoice_count} فاتورة</span></div></article>)}</div>
+        </section>
+        <section className="panel sales-panel"><div className="panel-heading"><div><h3>فاتورة بيع جديدة</h3><p>بيع منتج واحد حالياً مع تخفيض وأداء جزئي</p></div><span className="step-mark">05</span></div>
+          <form onSubmit={submitSale}>
+            <label>الزبون<select required value={saleCustomerId} onChange={e => setSaleCustomerId(e.target.value)}><option value="">اختار الزبون</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
+            <label>المنتج<select required value={saleProductId} onChange={e => setSaleProductId(e.target.value)}><option value="">اختار المنتج</option>{products.map(product => <option key={product.id} value={product.id}>{product.name} · {formatMad(product.sale_price_minor)}</option>)}</select></label>
+            <div className="two-cols"><label>الكمية<input type="number" min="0.01" step="0.01" required value={saleQuantity} onChange={e => setSaleQuantity(e.target.value)} /></label><label>التخفيض (DH)<input type="number" min="0" step="0.01" value={saleDiscount} onChange={e => setSaleDiscount(e.target.value)} /></label></div>
+            <label>المبلغ المؤدى دابا (DH)<input type="number" min="0" step="0.01" value={saleCollected} onChange={e => setSaleCollected(e.target.value)} placeholder="0.00 إذا البيع بالدين" /></label>
+            <button className="primary-button" disabled={saving || products.length === 0 || customers.length === 0}>{saving ? 'كتتسجل الفاتورة...' : 'تأكيد البيع وخصم المخزون'}</button>
+          </form>
+          <p className="hint">الفاتورة كتتسجل مع تفاصيل الثمن والتكلفة، وكتنقص الكمية من المستودع. البيع كيرفض إلا ما كانش المخزون كافي.</p>
         </section>
       </div>}
       <footer>تطبيقي · بيانات التطوير محلية على الجهاز · لا تستعملها للمحاسبة الفعلية بعد</footer>
