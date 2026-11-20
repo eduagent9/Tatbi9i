@@ -15,6 +15,7 @@ describe('ReportsRepository',()=>{
   const db=dbMock();
   const result=await new ReportsRepository(db).getFinancialSummary();
   expect(result).toEqual({salesMinor:10000,costMinor:6000,grossProfitMinor:4000,expensesMinor:1500,netProfitMinor:2500,outstandingMinor:2500,invoiceCount:3,expenseCount:2});
+  expect(db.query).toHaveBeenCalledWith(expect.stringContaining('invoice_line_batch_allocations'));
   expect(db.query).toHaveBeenCalledWith(expect.stringContaining("rl.condition='sellable'"));
  });
 });
