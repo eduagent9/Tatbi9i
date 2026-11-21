@@ -9,7 +9,7 @@ type Order={id:string;order_number:string;customer_id:string;customer_name:strin
 type Line={id:string;product_id:string;product_name_snapshot:string;quantity:number;unit_price_minor:number;remaining_quantity:number;unit_snapshot:string};
 const labels:Record<PersonalOrderStatus,string>={submitted:'طلب جديد',preparing:'قيد التحضير',ready:'جاهز للتسليم',partially_delivered:'تسليم جزئي',delivered:'تم التسليم',cancelled:'ملغى'};
 
-export function PersonalOrdersPanel({ownerId,customers,onChanged}:{ownerId:string;customers:Customer[];onChanged?:()=>void|Promise<void>}){
+export function PersonalOrdersPanel({ownerId,customers,productColumns,onProductColumnsChange,onChanged}:{ownerId:string;customers:Customer[];productColumns:1|2|3;onProductColumnsChange:(value:1|2|3)=>void;onChanged?:()=>void|Promise<void>}){
  const [products,setProducts]=useState<Product[]>([]);
  const [orders,setOrders]=useState<Order[]>([]);
  const [lines,setLines]=useState<Record<string,Line[]>>({});
@@ -80,11 +80,11 @@ export function PersonalOrdersPanel({ownerId,customers,onChanged}:{ownerId:strin
   },'تسجل التسليم والفاتورة وتحدّث المخزون والحسابات.');
  }
  return <section data-section="orders" className="panel personal-orders-panel">
-  <div className="panel-heading"><div><h3>الطلبات والتسليم</h3><p>طلب جديد، حجز المخزون، ثم اعتماد البيع عند التسليم فقط</p></div><span className="step-mark">شخصي</span></div>
+  <div className="panel-heading"><div><h3>الطلبات والتسليم</h3><p>طلب جديد، حجز المخزون، ثم اعتماد البيع عند التسليم فقط</p></div><label className="product-columns-control">البطاقات فالسطر<select aria-label="عدد بطاقات المنتجات في السطر" value={productColumns} onChange={e=>onProductColumnsChange(Number(e.target.value) as 1|2|3)}><option value={1}>1</option><option value={2}>2</option><option value={3}>3</option></select></label></div>
   {error&&<div className="message error" role="alert">{error}</div>}{message&&<div className="message success" role="status">{message}</div>}
   <div className="personal-order-form">
    <label>الزبون<select required value={customerId} onChange={e=>setCustomerId(e.target.value)}><option value="">اختار الزبون</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
-   <div className="personal-product-grid">{products.map(product=><article className="personal-product-card" key={product.id}>
+   <div className="personal-product-grid" style={{gridTemplateColumns:`repeat(${productColumns},minmax(0,1fr))`}}>{products.map(product=><article className="personal-product-card" key={product.id}>
     <div className="personal-product-image">{product.image_data_uri?<img src={product.image_data_uri} alt={product.name}/>:<div className="personal-product-placeholder">صورة المنتج</div>}</div>
     <div className="personal-product-info"><strong>{product.name}</strong><span>{formatMad(product.sale_price_minor)} · المتوفر {product.total_stock}</span>
      <div className="personal-product-actions"><input aria-label={'كمية '+product.name} type="number" min="0" step="0.01" value={cart[product.id]??'0'} onChange={e=>setCart(current=>({...current,[product.id]:e.target.value}))}/><button type="button" className="secondary-button" onClick={()=>setCart(current=>({...current,[product.id]:String(Number(current[product.id]??0)+1)}))}>＋</button></div>
