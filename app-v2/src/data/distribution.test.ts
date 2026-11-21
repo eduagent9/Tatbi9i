@@ -106,4 +106,17 @@ describe('DistributionRepository',()=>{
   expect(db.commitTransaction).toHaveBeenCalledOnce();
  });
 
+ it('assigns an attached ready order to the route vehicle when it was unassigned',async()=>{
+  const db=makeDb(sql=>{
+   if(sql.includes('FROM vehicles v'))return [{id:'v1',vehicle_type:'delivery',assigned_user_id:'d1',role:'delivery_driver',is_active:1}];
+   if(sql.includes('FROM customers'))return [{id:'c1'}];
+   if(sql.includes('FROM sales_orders WHERE id=?'))return [{id:'o1',customer_id:'c1',assigned_vehicle_id:null,status:'ready'}];
+   return [];
+  });
+  const repo=new DistributionRepository(db,()=> '2026-11-21T10:00:00Z',()=> 'generated');
+  await repo.createRoute({id:'r1',code:'R-1',name:'جولة',plannedDate:'2026-11-22',vehicleId:'v1',driverUserId:'d1',createdBy:'owner',stops:[{id:'s1',customerId:'c1',orderId:'o1',stopOrder:1}]});
+  expect(db.run).toHaveBeenCalledWith(expect.stringContaining('UPDATE sales_orders SET assigned_vehicle_id=?'),['v1','2026-11-21T10:00:00Z','o1']);
+  expect(db.commitTransaction).toHaveBeenCalledOnce();
+ });
+
 });
