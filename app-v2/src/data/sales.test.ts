@@ -10,7 +10,8 @@ function fakeDb(stock: number[] = [10], failMovement = false) {
     execute: vi.fn(async () => undefined),
     query: vi.fn(async (sql: string, values?: unknown[]) => {
       queryCalls.push({sql,values});
-      if (sql.includes('FROM products')) return {values:[{id:'p1',name:'ماء',base_unit:'piece',purchase_cost_minor:200,sale_price_minor:350}]};\n      if (sql.includes('SELECT credit_limit_minor FROM customers')) return {values:[{credit_limit_minor:0}]};
+      if (sql.includes('FROM products')) return {values:[{id:'p1',name:'ماء',base_unit:'piece',purchase_cost_minor:200,sale_price_minor:350}]};
+      if (sql.includes('SELECT credit_limit_minor FROM customers')) return {values:[{credit_limit_minor:0}]};
       if (sql.includes('FROM stock_balances')) return {values:balances.filter(x=>x.quantity>0).map(x=>({...x}))};
       return {values:[]};
     }),
