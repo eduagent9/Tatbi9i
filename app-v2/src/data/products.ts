@@ -104,6 +104,8 @@ export class ProductRepository {
     try{
       const found=await this.db.query('SELECT id FROM products WHERE id=? AND is_active=1',[requiredText(id,'معرّف المنتج')]);
       if(!found.values?.length)throw new Error('المنتج غير موجود أو مؤرشف.');
+      const stock=await this.db.query('SELECT COALESCE(SUM(quantity),0) AS quantity FROM stock_balances WHERE product_id=?',[id]);
+      if(Number(stock.values?.[0]?.quantity??0)>0)throw new Error('ما يمكنش أرشفة منتج باقي عندو مخزون؛ صفّي أو حوّل المخزون أولاً.');
       await this.db.run('UPDATE products SET is_active=0,updated_at=? WHERE id=?',[timestamp,id]);
       await this.db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,occurred_at) VALUES (?,?,?,?,?,?)',[crypto.randomUUID(),actorId,'product.archived','product',id,timestamp]);
       await this.db.commitTransaction();
