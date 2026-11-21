@@ -127,7 +127,7 @@ export default function App() {
     return () => { alive = false; };
   }, [refresh]);
 
-  async function scanProductBarcode(){
+  async function scanProductBarcode(target:'product'|'sale'|'purchase'|'stock'|'order'='product',index=0){
     setError('');setNotice('');
     let listener:Awaited<ReturnType<typeof BarcodeScanner.addListener>>|null=null;
     try{
@@ -141,8 +141,19 @@ export default function App() {
         await listener?.remove();listener=null;
         await BarcodeScanner.stopScan().catch(()=>undefined);
         document.body.classList.remove('barcode-scanner-active');setBarcodeScanning(false);
-        if(value){setForm(current=>({...current,barcode:value}));setNotice('تقرا الباركود بنجاح: '+value);}
-        else setError('تقرا الرمز ولكن القيمة ديالو ما واضحةش؛ عاود المحاولة.');
+        if(value){
+          if(target==='product'){setForm(current=>({...current,barcode:value}));setNotice('تقرا الباركود بنجاح: '+value);}
+          else{
+            const db=await openAppDatabase();const found=await db.query('SELECT product_id FROM barcodes WHERE barcode=? LIMIT 1',[value]);
+            const productId=found.values?.[0]?.product_id;
+            if(!productId){setError('هاد الباركود ما مربوط حتى بمنتج مسجل: '+value);return;}
+            if(target==='sale')setSaleLines(rows=>rows.map((line,i)=>i===index?{...line,productId:String(productId)}:line));
+            if(target==='purchase')setPurchaseLines(rows=>rows.map((line,i)=>i===index?{...line,productId:String(productId)}:line));
+            if(target==='order')setOrderLines(rows=>rows.map((line,i)=>i===index?{...line,productId:String(productId)}:line));
+            if(target==='stock')setStockProductId(String(productId));
+            setNotice('تلقا المنتج المرتبط بالباركود '+value+' وتختار فالقائمة.');
+          }
+        }else setError('تقرا الرمز ولكن القيمة ديالو ما واضحةش؛ عاود المحاولة.');
       });
       await BarcodeScanner.startScan({formats:[BarcodeFormat.Ean13,BarcodeFormat.Ean8,BarcodeFormat.UpcA,BarcodeFormat.UpcE,BarcodeFormat.Code128,BarcodeFormat.Code39,BarcodeFormat.Itf]});
     }catch(reason){
