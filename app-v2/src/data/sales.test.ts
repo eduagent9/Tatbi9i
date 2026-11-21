@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { SqliteExecutor } from './sqlite-database';
 import { SalesRepository } from './sales';
 
-function fakeDb(stock: number[] = [10], failMovement = false) {
+function fakeDb(stock: number[] = [10], failMovement = false, creditLimit = 0, existingDebt = 0) {
   const balances = stock.map((quantity,index)=>({id:'b'+index,batch_id:'batch'+index,quantity,expiry_date:index===0?'2027-01-01':'2027-06-01',unit_cost_minor:index===0?100:300}));
   const calls: Array<{sql:string;values?:unknown[]}> = [];
   const queryCalls: Array<{sql:string;values?:unknown[]}> = [];
@@ -11,7 +11,8 @@ function fakeDb(stock: number[] = [10], failMovement = false) {
     query: vi.fn(async (sql: string, values?: unknown[]) => {
       queryCalls.push({sql,values});
       if (sql.includes('FROM products')) return {values:[{id:'p1',name:'ماء',base_unit:'piece',purchase_cost_minor:200,sale_price_minor:350}]};
-      if (sql.includes('SELECT credit_limit_minor FROM customers')) return {values:[{credit_limit_minor:0}]};
+      if (sql.includes('SELECT credit_limit_minor FROM customers')) return {values:[{credit_limit_minor:creditLimit}]};
+      if (sql.includes('AS due_minor')) return {values:[{due_minor:existingDebt}]};
       if (sql.includes('FROM stock_balances')) return {values:balances.filter(x=>x.quantity>0).map(x=>({...x}))};
       return {values:[]};
     }),
