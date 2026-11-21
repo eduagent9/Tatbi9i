@@ -26,4 +26,11 @@ describe('SupplierRepository',()=>{
   expect(result[0].receipt_count).toBe(2); expect(result[0].purchased_minor).toBe(25000);
   expect(db.query).toHaveBeenCalledOnce();
  });
+ it('updates supplier contact details transactionally',async()=>{
+  const db=dbMock(),repo=new SupplierRepository(db,()=> '2026-11-21T12:00:00.000Z');
+  await repo.update({id:'s1',name:'مورد جديد',phone:'0611111111',address:'الدار البيضاء'});
+  expect(db.run).toHaveBeenCalledWith(expect.stringContaining('UPDATE suppliers SET name=?'),expect.arrayContaining(['مورد جديد','0611111111','الدار البيضاء']));
+  expect(db.commitTransaction).toHaveBeenCalledOnce();
+ });
+
 });
