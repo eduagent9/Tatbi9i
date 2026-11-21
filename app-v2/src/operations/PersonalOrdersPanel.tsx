@@ -2,6 +2,7 @@ import {useCallback,useEffect,useMemo,useState} from 'react';
 import {formatMad,madToMinorUnits} from '../data/money';
 import {openAppDatabase} from '../data/sqlite-database';
 import {PersonalOrdersRepository,type PersonalOrderStatus} from '../data/personal-orders';
+import {ProductImagesRepository} from '../data/product-images';
 
 type Customer={id:string;name:string};
 type Product={id:string;name:string;category:string|null;image_data_uri:string|null;sale_price_minor:number;total_stock:number;barcode:string|null};
@@ -22,11 +23,16 @@ export function PersonalOrdersPanel({ownerId,customers,productColumns,onProductC
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
  const [message,setMessage]=useState('');
+ const [gallery,setGallery]=useState<string[]>([]);
+ const [galleryTitle,setGalleryTitle]=useState('');
+ const [galleryIndex,setGalleryIndex]=useState(0);
 
  const load=useCallback(async()=>{
   const db=await openAppDatabase();
   const [p,o]=await Promise.all([
-   db.query(`SELECT p.id,p.name,p.category,p.image_data_uri,p.sale_price_minor,p.barcode,COALESCE(SUM(sb.quantity),0) AS total_stock
+   db.query(`SELECT p.id,p.name,p.category,p.image_data_uri,p.sale_price_minor,p.barcode,
+    MAX(0,COALESCE(SUM(sb.quantity),0)-COALESCE((SELECT SUM(r.quantity-r.fulfilled_quantity) FROM sales_order_reservations r
+      WHERE r.product_id=p.id AND r.location_id='loc-depot-main' AND r.status='active'),0)) AS total_stock
     FROM products p LEFT JOIN stock_balances sb ON sb.product_id=p.id AND sb.location_id='loc-depot-main'
     WHERE p.is_active=1 GROUP BY p.id ORDER BY p.name COLLATE NOCASE`),
    db.query(`SELECT o.id,o.order_number,o.customer_id,c.name AS customer_name,o.status,o.total_minor,o.created_at
@@ -54,6 +60,10 @@ export function PersonalOrdersPanel({ownerId,customers,productColumns,onProductC
   try{await action();await load();await onChanged?.();setMessage(success);}
   catch(e){setError(e instanceof Error?e.message:'تعذرت العملية.');}
   finally{setBusy(false);}
+ }
+ async function openGallery(product:Product){
+  try{const db=await openAppDatabase();const rows=await new ProductImagesRepository(db).list(product.id);const images=rows.map(row=>row.image_data_uri);setGallery(images.length?images:(product.image_data_uri?[product.image_data_uri]:[]));setGalleryTitle(product.name);setGalleryIndex(0);}
+  catch(e){setError(e instanceof Error?e.message:'تعذر فتح صور المنتج.');}
  }
  async function createOrder(){
   if(!customerId)throw new Error('اختار الزبون أولاً.');
@@ -85,9 +95,9 @@ export function PersonalOrdersPanel({ownerId,customers,productColumns,onProductC
   <div className="personal-order-form">
    <label>الزبون<select required value={customerId} onChange={e=>setCustomerId(e.target.value)}><option value="">اختار الزبون</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
    <div className="personal-product-grid" style={{gridTemplateColumns:`repeat(${productColumns},minmax(0,1fr))`}}>{products.map(product=><article className="personal-product-card" key={product.id}>
-    <div className="personal-product-image">{product.image_data_uri?<img src={product.image_data_uri} alt={product.name}/>:<div className="personal-product-placeholder">صورة المنتج</div>}</div>
-    <div className="personal-product-info"><strong>{product.name}</strong><span>{formatMad(product.sale_price_minor)} · المتوفر {product.total_stock}</span>
-     <div className="personal-product-actions"><input aria-label={'كمية '+product.name} type="number" min="0" step="0.01" value={cart[product.id]??'0'} onChange={e=>setCart(current=>({...current,[product.id]:e.target.value}))}/><button type="button" className="secondary-button" onClick={()=>setCart(current=>({...current,[product.id]:String(Number(current[product.id]??0)+1)}))}>＋</button></div>
+    <div className="personal-product-image" role="button" tabIndex={0} aria-label={'عرض صور '+product.name} onClick={()=>openGallery(product)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openGallery(product);}}}>{product.image_data_uri?<img src={product.image_data_uri} alt={product.name}/>:<div className="personal-product-placeholder">صورة المنتج</div>}</div>
+    <div className="personal-product-info"><strong>{product.name}</strong><span>{formatMad(product.sale_price_minor)} · {product.total_stock>0?'متوفر':'غير متوفر'}</span>
+     <div className="personal-product-actions"><button type="button" className="secondary-button" aria-label={'نقص كمية '+product.name} disabled={Number(cart[product.id]??0)<=0} onClick={()=>setCart(current=>({...current,[product.id]:String(Math.max(0,Number(current[product.id]??0)-1))}))}>−</button><input aria-label={'كمية '+product.name} type="number" min="0" max={product.total_stock} step="0.01" value={cart[product.id]??'0'} disabled={product.total_stock<=0} onChange={e=>setCart(current=>({...current,[product.id]:String(Math.min(product.total_stock,Math.max(0,Number(e.target.value)||0)))}))}/><button type="button" className="secondary-button" disabled={product.total_stock<=0||Number(cart[product.id]??0)>=product.total_stock} onClick={()=>setCart(current=>({...current,[product.id]:String(Math.min(product.total_stock,Number(current[product.id]??0)+1))}))}>＋</button></div>
     </div>
    </article>)}</div>
    <label>تخفيض الطلب (DH)<input type="number" min="0" step="0.01" value={discount} onChange={e=>setDiscount(e.target.value)}/></label>
@@ -106,5 +116,6 @@ export function PersonalOrdersPanel({ownerId,customers,productColumns,onProductC
     <strong>قيمة الطلب: {formatMad(order.total_minor)}</strong>
    </div>
   </article>)}</div>}
+ {gallery.length>0&&<div className="product-gallery-lightbox" role="dialog" aria-modal="true" aria-label={'صور '+galleryTitle} onClick={()=>setGallery([])}><button type="button" className="gallery-close" aria-label="إغلاق" onClick={()=>setGallery([])}>×</button><button type="button" className="gallery-arrow" disabled={gallery.length<2} onClick={e=>{e.stopPropagation();setGalleryIndex(i=>(i-1+gallery.length)%gallery.length);}}>‹</button><figure onClick={e=>e.stopPropagation()}><img src={gallery[galleryIndex]} alt={galleryTitle}/><figcaption>{galleryTitle} · {galleryIndex+1}/{gallery.length}</figcaption></figure><button type="button" className="gallery-arrow" disabled={gallery.length<2} onClick={e=>{e.stopPropagation();setGalleryIndex(i=>(i+1)%gallery.length);}}>›</button></div>}
  </section>;
 }
