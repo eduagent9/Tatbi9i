@@ -22,6 +22,32 @@ export interface SqliteExecutor {
   rollbackTransaction(): Promise<unknown>;
 }
 
+interface NativeSqliteConnection {
+  execute(statement: string, transaction?: boolean): Promise<unknown>;
+  query(statement: string, values?: unknown[]): Promise<{ values?: Array<Record<string, unknown>> }>;
+  run(statement: string, values?: unknown[], transaction?: boolean): Promise<unknown>;
+  beginTransaction(): Promise<unknown>;
+  commitTransaction(): Promise<unknown>;
+  rollbackTransaction(): Promise<unknown>;
+}
+
+/**
+ * The plugin wraps execute() and run() in their own transactions by default.
+ * Our repositories and migration runner explicitly own multi-statement
+ * transactions, so nested plugin transactions must be disabled for individual
+ * statements. SQLite still commits standalone statements in autocommit mode.
+ */
+export function createSqliteExecutor(connection: NativeSqliteConnection): SqliteExecutor {
+  return {
+    execute: statement => connection.execute(statement, false),
+    query: (statement, values) => connection.query(statement, values),
+    run: (statement, values) => connection.run(statement, values, false),
+    beginTransaction: () => connection.beginTransaction(),
+    commitTransaction: () => connection.commitTransaction(),
+    rollbackTransaction: () => connection.rollbackTransaction(),
+  };
+}
+
 export interface SqliteConnectionFactory {
   open(name: string): Promise<SqliteExecutor>;
   close(name: string): Promise<void>;
@@ -97,7 +123,7 @@ class CapacitorSqliteFactory implements SqliteConnectionFactory {
   async open(name: string): Promise<SqliteExecutor> {
     const connection = await this.sqlite.createConnection(name, false, 'no-encryption', 1, false);
     await connection.open();
-    return connection as unknown as SqliteExecutor;
+    return createSqliteExecutor(connection as unknown as NativeSqliteConnection);
   }
 
   async close(name: string): Promise<void> {
