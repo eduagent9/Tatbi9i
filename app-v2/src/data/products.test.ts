@@ -42,4 +42,26 @@ describe('ProductRepository', () => {
     expect(rows[0]).toMatchObject({ id: 'p1', total_stock: 12, barcode: '6110001' });
     expect(db.query).toHaveBeenCalledOnce();
   });
+  it('updates catalog details and replaces the barcode without touching stock history',async()=>{
+    const db=fakeDb(),repo=new ProductRepository(db,()=> '2026-11-21T12:00:00.000Z');
+    await repo.update({id:'p1',name:'ماء جديد',purchaseCostMinor:260,salePriceMinor:400,barcode:'6119999'});
+    expect(db.run).toHaveBeenCalledWith(expect.stringContaining('UPDATE products'),expect.arrayContaining(['ماء جديد']));
+    expect(db.run).toHaveBeenCalledWith(expect.stringContaining('DELETE FROM barcodes'),['p1']);
+    expect(db.run).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO barcodes'),['p1:barcode','p1','6119999','piece',1]);
+    expect(db.commitTransaction).toHaveBeenCalledOnce();
+  });
+  it('rolls back product edits when a replacement barcode conflicts',async()=>{
+    const db=fakeDb(true),repo=new ProductRepository(db);
+    await expect(repo.update({id:'p1',name:'ماء',purchaseCostMinor:1,salePriceMinor:2,barcode:'duplicate'})).rejects.toThrow('barcode exists');
+    expect(db.rollbackTransaction).toHaveBeenCalledOnce();
+    expect(db.commitTransaction).not.toHaveBeenCalled();
+  });
+  it('archives rather than deleting a product',async()=>{
+    const db=fakeDb(),repo=new ProductRepository(db);
+    await repo.archive('p1','owner');
+    expect(db.run).toHaveBeenCalledWith(expect.stringContaining('UPDATE products SET is_active=0'),expect.any(Array));
+    expect(db.run).toHaveBeenCalledWith(expect.stringContaining('product.archived'),expect.any(Array));
+    expect(db.commitTransaction).toHaveBeenCalledOnce();
+  });
+
 });
