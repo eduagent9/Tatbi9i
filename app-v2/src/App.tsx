@@ -17,6 +17,7 @@ import { StockAndReturnsPanel } from './operations/StockAndReturnsPanel';
 import { DataBackupPanel } from './operations/DataBackupPanel';
 import { DistributionOperationsPanel } from './operations/DistributionOperationsPanel';
 import { InvoiceArchivePanel } from './operations/InvoiceArchivePanel';
+import { ProductCardPicker } from './operations/ProductCardPicker';
 import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
 import {translate,type AppLanguage} from './data/i18n';
 
