@@ -15,6 +15,7 @@ import { ExpenseRepository } from './data/expenses';
 import { ReportsRepository, type FinancialSummary } from './data/reports';
 import { StockAndReturnsPanel } from './operations/StockAndReturnsPanel';
 import { DataBackupPanel } from './operations/DataBackupPanel';
+import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
 
 const emptyForm = { name: '', category: 'مواد غذائية', subcategory: '', unit: 'piece' as 'piece' | 'carton', pieces: '12', cost: '', price: '', threshold: '0', barcode: '' };
 type DistributionOrderRow = { id:string; order_number:string; customer_name:string; created_by_user_id:string; created_by_name:string; assigned_vehicle_id:string|null; vehicle_label:string|null; status:'draft'|'submitted'|'accepted'|'preparing'|'ready'|'partially_delivered'|'delivered'|'cancelled'; total_minor:number; created_at:string };
@@ -88,6 +89,7 @@ export default function App() {
   const [stockQuantity, setStockQuantity] = useState('1');
   const [stockDirection, setStockDirection] = useState<'in' | 'out'>('in');
   const [stockOutType, setStockOutType] = useState<'delivery' | 'damage' | 'supplier_return'>('delivery');
+  const [barcodeScanning,setBarcodeScanning]=useState(false);
 
   const refresh = useCallback(async (repo: ProductRepository) => setProducts(await repo.list()), []);
   useEffect(() => {
@@ -121,6 +123,36 @@ export default function App() {
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [refresh]);
+
+  async function scanProductBarcode(){
+    setError('');setNotice('');
+    let listener:Awaited<ReturnType<typeof BarcodeScanner.addListener>>|null=null;
+    try{
+      const permission=await BarcodeScanner.checkPermissions();
+      const granted=permission.camera==='granted'?permission:await BarcodeScanner.requestPermissions();
+      if(granted.camera!=='granted')throw new Error('خاصك تسمح للتطبيق باستعمال الكاميرا باش يقرا الباركود.');
+      document.body.classList.add('barcode-scanner-active');
+      setBarcodeScanning(true);
+      listener=await BarcodeScanner.addListener('barcodeScanned',async event=>{
+        const value=event.barcode.rawValue?.trim();
+        await listener?.remove();listener=null;
+        await BarcodeScanner.stopScan().catch(()=>undefined);
+        document.body.classList.remove('barcode-scanner-active');setBarcodeScanning(false);
+        if(value){setForm(current=>({...current,barcode:value}));setNotice('تقرا الباركود بنجاح: '+value);}
+        else setError('تقرا الرمز ولكن القيمة ديالو ما واضحةش؛ عاود المحاولة.');
+      });
+      await BarcodeScanner.startScan({formats:[BarcodeFormat.Ean13,BarcodeFormat.Ean8,BarcodeFormat.UpcA,BarcodeFormat.UpcE,BarcodeFormat.Code128,BarcodeFormat.Code39,BarcodeFormat.Itf]});
+    }catch(reason){
+      await listener?.remove().catch(()=>undefined);
+      await BarcodeScanner.stopScan().catch(()=>undefined);
+      document.body.classList.remove('barcode-scanner-active');setBarcodeScanning(false);
+      setError(reason instanceof Error?reason.message:'تعذر تشغيل قارئ الباركود. تأكد من صلاحية الكاميرا.');
+    }
+  }
+  async function stopBarcodeScan(){
+    await BarcodeScanner.stopScan().catch(()=>undefined);
+    document.body.classList.remove('barcode-scanner-active');setBarcodeScanning(false);
+  }
 
   async function setupOwnerPin(event:FormEvent<HTMLFormElement>){
     event.preventDefault();
@@ -689,6 +721,7 @@ export default function App() {
       {loading && <div className="message">كنوجد قاعدة البيانات...</div>}
       {!loading && error && <div className="message error" role="alert">{error}<small>المعاينة فالمتصفح ما كتخزنش البيانات؛ افتح تطبيق Android المبني باش تجرب SQLite.</small></div>}
       {notice && <div className="message success" role="status">{notice}</div>}
+      {barcodeScanning&&<div className="barcode-scanner-overlay"><div className="barcode-scanner-frame"><span>وجه الكاميرا نحو باركود المنتج</span><span className="barcode-scanner-corners"/><button type="button" className="secondary-button" onClick={stopBarcodeScan}>إلغاء المسح</button></div></div>}
       {lastInvoice&&<section className="panel last-invoice-actions"><div><strong>آخر فاتورة: {lastInvoice.number}</strong><p className="hint">الفاتورة محفوظة فقاعدة البيانات، وتقدر تطبعها أو تحفظها PDF.</p></div><button type="button" className="primary-button" onClick={()=>window.print()}>طباعة الفاتورة / PDF</button></section>}
       {lastInvoice&&<section id="invoice-print-root" aria-label="فاتورة البيع">
         <header className="invoice-print-header"><div><h1>تطبيقي</h1><p>فاتورة بيع</p></div><div><strong>رقم الفاتورة</strong><span>{lastInvoice.number}</span><strong>التاريخ</strong><span>{lastInvoice.date}</span></div></header>
@@ -834,7 +867,7 @@ export default function App() {
             <div className="two-cols"><label>الصنف<select value={form.category} onChange={e => setForm({...form,category:e.target.value})}><option>مواد غذائية</option><option>مشروبات</option><option>مواد التنظيف</option><option>العناية والتجميل</option><option>مواد منزلية</option><option>متنوعات</option></select></label><label>الصنف الفرعي<input value={form.subcategory} onChange={e => setForm({...form,subcategory:e.target.value})} placeholder="اختياري" /></label></div>
             <div className="two-cols"><label>وحدة البيع<select value={form.unit} onChange={e => setForm({...form,unit:e.target.value as 'piece'|'carton'})}><option value="piece">قطعة</option><option value="carton">كرتونة</option></select></label>{form.unit === 'carton' && <label>القطع في الكرتونة<input type="number" min="1" step="1" required value={form.pieces} onChange={e => setForm({...form,pieces:e.target.value})} /></label>}</div>
             <div className="two-cols"><label>ثمن الشراء (DH)<input type="number" min="0" step="0.01" required value={form.cost} onChange={e => setForm({...form,cost:e.target.value})} placeholder="0.00" /></label><label>ثمن البيع (DH)<input type="number" min="0" step="0.01" required value={form.price} onChange={e => setForm({...form,price:e.target.value})} placeholder="0.00" /></label></div>
-            <div className="two-cols"><label>حد التنبيه للمخزون<input type="number" min="0" step="0.01" value={form.threshold} onChange={e => setForm({...form,threshold:e.target.value})} /></label><label>الباركود<input value={form.barcode} onChange={e => setForm({...form,barcode:e.target.value})} placeholder="اختياري" /></label></div>
+            <div className="two-cols"><label>حد التنبيه للمخزون<input type="number" min="0" step="0.01" value={form.threshold} onChange={e => setForm({...form,threshold:e.target.value})} /></label><label>الباركود<input value={form.barcode} onChange={e => setForm({...form,barcode:e.target.value})} placeholder="اختياري" /></label></div><button type="button" className="secondary-button barcode-scan-trigger" disabled={saving||barcodeScanning} onClick={scanProductBarcode}>مسح الباركود بالكاميرا</button>
             <button className="primary-button" disabled={saving}>{saving ? 'كيتم الحفظ...' : 'حفظ المنتج'}</button>
           </form>
         </section>
