@@ -17,6 +17,7 @@ import { StockAndReturnsPanel } from './operations/StockAndReturnsPanel';
 import { DataBackupPanel } from './operations/DataBackupPanel';
 import { DistributionOperationsPanel } from './operations/DistributionOperationsPanel';
 import { PersonalOrdersPanel } from './operations/PersonalOrdersPanel';
+import { SupplierAccountsPanel } from './operations/SupplierAccountsPanel';
 import { InvoiceArchivePanel } from './operations/InvoiceArchivePanel';
 import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
 
@@ -779,6 +780,7 @@ export default function App() {
 
         <section className="panel sales-panel"><div className="panel-heading"><div><h3>بيع من المستودع</h3><p>بيع مباشر من مخزون الديبو مع أداء جزئي أو آجل</p></div></div>
           <form onSubmit={submitSale}>
+            <div className="personal-product-grid sale-product-grid">{products.map(product=><article className="personal-product-card" key={product.id}><div className="personal-product-image">{product.image_data_uri?<img src={product.image_data_uri} alt={product.name}/>:<div className="personal-product-placeholder">صورة المنتج</div>}</div><div className="personal-product-info"><strong>{product.name}</strong><span>{formatMad(product.sale_price_minor)} · المتوفر {product.total_stock}</span><button type="button" className="secondary-button" disabled={product.total_stock<=0} onClick={()=>setSaleLines(current=>{const index=current.findIndex(line=>line.productId===product.id);if(index>=0)return current.map((line,i)=>i===index?{...line,quantity:String(Number(line.quantity||0)+1)}:line);if(current.length===1&&!current[0].productId)return [{productId:product.id,quantity:'1'}];return [...current,{productId:product.id,quantity:'1'}];})}>إضافة للبيع</button></div></article>)}</div>
             <label>الزبون<select required value={saleCustomerId} onChange={e=>setSaleCustomerId(e.target.value)}><option value="">اختار الزبون</option>{customers.map(customer=><option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
             {saleLines.map((line,index)=><div className="sale-line" key={index}><label>المنتج<select required value={line.productId} onChange={e=>setSaleLines(current=>current.map((item,i)=>i===index?{...item,productId:e.target.value}:item))}><option value="">اختار المنتج</option>{products.map(product=><option key={product.id} value={product.id}>{product.name} · {formatMad(product.sale_price_minor)}</option>)}</select></label><button type="button" className="secondary-button" onClick={()=>scanProductBarcode('sale',index)}>مسح باركود المنتج</button><label>الكمية<input type="number" min="0.01" step="0.01" required value={line.quantity} onChange={e=>setSaleLines(current=>current.map((item,i)=>i===index?{...item,quantity:e.target.value}:item))}/></label><button type="button" className="remove-line" disabled={saleLines.length===1} onClick={()=>setSaleLines(current=>current.filter((_,i)=>i!==index))}>حذف السطر</button></div>)}
             <button type="button" className="secondary-button" onClick={()=>setSaleLines(current=>[...current,{productId:'',quantity:'1'}])}>+ إضافة منتج</button>
@@ -993,6 +995,7 @@ export default function App() {
             <button className="primary-button" disabled={saving || suppliers.length === 0 || products.length === 0 || purchaseLines.length===0}>{saving ? 'كيتسجل التوريد...' : 'تأكيد التوريد وإضافة المخزون'}</button>
           </form>
           <p className="hint">التوريد كيزيد المخزون ويحدث متوسط تكلفة الشراء. وصل الشراء والدفعات وحركة المخزون كيتسجلو فمعاملة واحدة.</p>
+          <SupplierAccountsPanel ownerId={currentUser.id} suppliers={suppliers}/>
         </section>
         <section data-section="sales" className="panel collection-panel"><div className="panel-heading"><div><h3>تحصيل الديون</h3><p>تسجيل أداء لاحق على فاتورة سابقة</p></div><span className="step-mark">06</span></div>
           <form onSubmit={submitCollection}>
