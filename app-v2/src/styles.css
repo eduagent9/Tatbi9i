@@ -66,3 +66,17 @@ body.barcode-scanner-active .barcode-scanner-overlay{visibility:visible!importan
 .barcode-scanner-frame>span:first-child{background:rgba(0,0,0,.65);padding:9px 14px;border-radius:8px}
 .barcode-scanner-frame .secondary-button{background:#fff;color:#17323d;text-shadow:none}
 .barcode-scanner-corners{position:absolute;inset:22% 8%;border:2px solid #8be0c3;border-radius:8px;pointer-events:none}
+
+
+/* Mobile-style section navigation: render one workspace at a time. */
+.main-section-nav button{flex:0 0 auto;border:1px solid #dce7e9;border-radius:11px;background:#fff;color:#315f66;padding:10px 16px;font:inherit;font-size:13px;font-weight:700;white-space:nowrap;cursor:pointer}
+.main-section-nav button.active{background:#176b68;color:#fff;border-color:#176b68}
+.section-view[data-active-section] > section{display:none}
+.section-view[data-active-section="home"] > section[data-section="home"],
+.section-view[data-active-section="sales"] > section[data-section="sales"],
+.section-view[data-active-section="inventory"] > section[data-section="inventory"],
+.section-view[data-active-section="purchases"] > section[data-section="purchases"],
+.section-view[data-active-section="relations"] > section[data-section="relations"],
+.section-view[data-active-section="management"] > section[data-section="management"]{display:block}
+.section-view{align-items:start}
+@media(max-width:760px){.main-section-nav button{padding:10px 13px;font-size:12px}}
