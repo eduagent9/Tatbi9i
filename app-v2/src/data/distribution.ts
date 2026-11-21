@@ -196,7 +196,7 @@ export class DistributionRepository {
     if(input.closingOdometer!=null&&(!Number.isFinite(input.closingOdometer)||input.closingOdometer<0))throw new RangeError('عداد الكيلومترات غير صالح.');
     const now=this.now();await this.db.beginTransaction();
     try{
-      const found=await this.db.query("SELECT id,vehicle_id,opening_odometer,opening_cash_minor,expected_cash_minor,status FROM vehicle_day_sessions WHERE id=? AND responsible_user_id=?",[input.sessionId,input.responsibleUserId]);
+      const found=await this.db.query("SELECT id,vehicle_id,opening_odometer,opening_cash_minor,expected_cash_minor,status,opened_at FROM vehicle_day_sessions WHERE id=? AND responsible_user_id=?",[input.sessionId,input.responsibleUserId]);
       const session=found.values?.[0];if(!session||String(session.status)!=='open')throw new Error('جلسة السيارة ماشي مفتوحة أو ماشي ديالك.');
       if(input.closingOdometer!=null&&session.opening_odometer!=null&&input.closingOdometer<Number(session.opening_odometer))throw new Error('عداد الإغلاق ما يقدرش يكون أقل من عداد البداية.');
       const location=await this.db.query("SELECT id FROM stock_locations WHERE vehicle_id=? AND location_type='vehicle' AND is_active=1",[session.vehicle_id]);
