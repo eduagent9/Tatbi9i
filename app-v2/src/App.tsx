@@ -18,6 +18,7 @@ import { DataBackupPanel } from './operations/DataBackupPanel';
 import { DistributionOperationsPanel } from './operations/DistributionOperationsPanel';
 import { InvoiceArchivePanel } from './operations/InvoiceArchivePanel';
 import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
+import {translate,type AppLanguage} from './data/i18n';
 
 const emptyForm = { name: '', category: 'مواد غذائية', subcategory: '', unit: 'piece' as 'piece' | 'carton', pieces: '12', cost: '', price: '', threshold: '0', barcode: '', imageLocalUri: '' };
 type DistributionOrderRow = { id:string; order_number:string; customer_name:string; created_by_user_id:string; created_by_name:string; assigned_vehicle_id:string|null; vehicle_label:string|null; status:'draft'|'submitted'|'accepted'|'preparing'|'ready'|'partially_delivered'|'delivered'|'cancelled'; total_minor:number; created_at:string };
@@ -96,6 +97,9 @@ export default function App() {
   const [stockOutType, setStockOutType] = useState<'delivery' | 'damage' | 'supplier_return'>('delivery');
   const [barcodeScanning,setBarcodeScanning]=useState(false);
   const [activeSection,setActiveSection]=useState<'home'|'sales'|'inventory'|'distribution'|'purchases'|'relations'|'management'>('home');
+  const [language,setLanguage]=useState<AppLanguage>(()=>{const saved=localStorage.getItem('tatbiqi.language');return saved==='fr'||saved==='en'?saved:'ar';});
+  useEffect(()=>{localStorage.setItem('tatbiqi.language',language);document.documentElement.lang=language;document.documentElement.dir=language==='ar'?'rtl':'ltr';},[language]);
+  const tr=(key:Parameters<typeof translate>[1])=>translate(language,key);
 
   const refresh = useCallback(async (repo: ProductRepository) => setProducts(await repo.list()), []);
   useEffect(() => {
@@ -732,9 +736,9 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell" dir="rtl">
-      <header className="topbar"><div><span className="brand-mark">ت</span><div><p className="eyebrow">إدارة التوزيع والمبيعات</p><h1>تطبيقي</h1></div></div><div className="topbar-actions">{currentUser&&<><span className="mode-tag">{currentUser.display_name} · {roleLabels[currentUser.role]}</span><button type="button" className="secondary-button" onClick={logoutUser}>خروج</button></>}<span className="mode-tag">نسخة تطوير</span></div></header>
-      <section className="page-heading"><div><p className="eyebrow">تدبير شركة التوزيع</p><h2>{currentUser?.role==='owner'?({home:'الرئيسية',sales:'المبيعات',inventory:'المخزون',distribution:'التوزيع',purchases:'المشتريات',relations:'العلاقات',management:'الإدارة'} as const)[activeSection]:'مساحة العمل'}</h2><p>{currentUser?.role==='owner'?'كل عمليات الشركة ومؤشراتها في مكان واحد':'مرحبا بك في مساحة العمل الخاصة بدورك'}</p></div><div className="total-card"><strong>{products.length}</strong><span>منتج مسجل</span></div></section>
+    <main className="app-shell" dir={language==='ar'?'rtl':'ltr'}>
+      <header className="topbar"><div><span className="brand-mark">ت</span><div><p className="eyebrow">{tr('company')}</p><h1>{tr('appName')}</h1></div></div><div className="topbar-actions"><label className="language-picker">{tr('language')}<select aria-label={tr('language')} value={language} onChange={e=>setLanguage(e.target.value as AppLanguage)}><option value="ar">العربية</option><option value="fr">Français</option><option value="en">English</option></select></label>{currentUser&&<><span className="mode-tag">{currentUser.display_name} · {tr(currentUser.role)}</span><button type="button" className="secondary-button" onClick={logoutUser}>{tr('logout')}</button></>}<span className="mode-tag">نسخة تطوير</span></div></header>
+      <section className="page-heading"><div><p className="eyebrow">تدبير شركة التوزيع</p><h2>{currentUser?.role==='owner'?tr(activeSection):'مساحة العمل'}</h2><p>{currentUser?.role==='owner'?'كل عمليات الشركة ومؤشراتها في مكان واحد':'مرحبا بك في مساحة العمل الخاصة بدورك'}</p></div><div className="total-card"><strong>{products.length}</strong><span>منتج مسجل</span></div></section>
       {loading && <div className="message">كنوجد قاعدة البيانات...</div>}
       {!loading && error && <div className="message error" role="alert">{error}<small>المعاينة فالمتصفح ما كتخزنش البيانات؛ افتح تطبيق Android المبني باش تجرب SQLite.</small></div>}
       {notice && <div className="message success" role="status">{notice}</div>}
@@ -833,7 +837,7 @@ export default function App() {
           </form>
         </section>
       </div>}
-      {currentUser?.role==='owner'&&repository&&<nav className="main-section-nav" aria-label="الأقسام الرئيسية">{([{id:'home',label:'الرئيسية'},{id:'sales',label:'المبيعات'},{id:'inventory',label:'المخزون'},{id:'distribution',label:'التوزيع'},{id:'purchases',label:'المشتريات'},{id:'relations',label:'العلاقات'},{id:'management',label:'الإدارة'}] as const).map(item=><button type="button" key={item.id} className={activeSection===item.id?'active':''} aria-current={activeSection===item.id?'page':undefined} onClick={()=>setActiveSection(item.id)}>{item.label}</button>)}</nav>}
+      {currentUser?.role==='owner'&&repository&&<nav className="main-section-nav" aria-label="الأقسام الرئيسية">{([{id:'home',label:tr('home')},{id:'sales',label:tr('sales')},{id:'inventory',label:tr('inventory')},{id:'distribution',label:tr('distribution')},{id:'purchases',label:tr('purchases')},{id:'relations',label:tr('relations')},{id:'management',label:tr('management')}] as const).map(item=><button type="button" key={item.id} className={activeSection===item.id?'active':''} aria-current={activeSection===item.id?'page':undefined} onClick={()=>setActiveSection(item.id)}>{item.label}</button>)}</nav>}
       {currentUser?.role==='owner'&&repository && <div className="content-grid section-view" data-active-section={activeSection}>
         <section data-section="home" className="dashboard-overview">
           <div className="dashboard-welcome"><div><p className="eyebrow">نظرة عامة</p><h3>مرحبا {currentUser.display_name}</h3><p>ها ملخص النشاط ديال الشركة، وتقدر تمشي مباشرة لأي عملية.</p></div><span className="dashboard-date">{new Date().toLocaleDateString('ar-MA',{weekday:'long',day:'numeric',month:'long'})}</span></div>
