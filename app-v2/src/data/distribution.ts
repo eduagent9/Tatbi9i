@@ -224,7 +224,7 @@ export class DistributionRepository {
           await this.db.run("INSERT INTO stock_movements (id,product_id,batch_id,from_location_id,to_location_id,quantity,movement_type,reference_type,reference_id,performed_by,responsible_user_id,occurred_at,note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",[this.makeId(),row.product_id,row.batch_id??null,locationId,locationId,Math.abs(variance),'stock_count','vehicle_day_session',input.sessionId,input.responsibleUserId,input.responsibleUserId,now,'مطابقة مخزون السيارة: '+variance]);
         }
       }
-      const cashRows=await this.db.query('SELECT COALESCE(SUM(expected_cash_minor),0) AS amount FROM cash_sessions WHERE vehicle_id=? AND user_id=? AND opened_at>=?',[session.vehicle_id,input.responsibleUserId,session.opened_at]);
+      const cashRows=await this.db.query('SELECT COALESCE(SUM(expected_cash_minor),0) AS amount FROM cash_sessions WHERE vehicle_id=? AND user_id=? AND substr(opened_at,1,10)=?',[session.vehicle_id,input.responsibleUserId,session.business_date]);
       const expectedCash=Number(session.opening_cash_minor??0)+Number(cashRows.values?.[0]?.amount??0);
       const cashDifference=input.countedCashMinor-expectedCash;
       await this.db.run("UPDATE vehicle_day_sessions SET expected_cash_minor=?,closing_odometer=?,counted_cash_minor=?,status='reconciled',closed_at=?,discrepancy_note=? WHERE id=? AND status='open'",[expectedCash,input.closingOdometer??null,input.countedCashMinor,now,cashDifference===0?null:'فرق نقدي: '+cashDifference,input.sessionId]);
