@@ -24,6 +24,13 @@ describe('ProductRepository', () => {
     expect(db.commitTransaction).toHaveBeenCalledOnce();
     expect(db.rollbackTransaction).not.toHaveBeenCalled();
   });
+  it('persists a local product photo URI without changing product identity or stock',async()=>{
+    const db=fakeDb(),repo=new ProductRepository(db);
+    const photo='data:image/jpeg;base64,ZmFrZQ==';
+    await repo.create({id:'p-photo',name:'عصير',purchaseCostMinor:100,salePriceMinor:150,imageLocalUri:photo});
+    expect(db.run).toHaveBeenCalledWith(expect.stringContaining('image_local_uri'),expect.arrayContaining([photo]));
+    expect(db.commitTransaction).toHaveBeenCalledOnce();
+  });
   it('rolls back product creation if barcode insertion fails', async () => {
     const db = fakeDb(true);
     const repo = new ProductRepository(db);
