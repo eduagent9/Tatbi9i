@@ -209,7 +209,8 @@ export class DistributionRepository {
         submitted.set(key,quantity(count.countedQuantity,'الكمية المعدودة'));
       }
       const expectedKeys=new Set((expected.values??[]).map(row=>String(row.product_id)+'|'+String(row.variant_id??'')+'|'+String(row.batch_id??'')));
-      for(const key of expectedKeys)if(!submitted.has(key))throw new Error('خاصك تدخل العد الفعلي لجميع المنتجات والدفعات اللي عندها رصيد.');\n      for(const key of submitted.keys())if(!expectedKeys.has(key))throw new Error('كاين منتج أو دفعة فالجرد ما عندهاش رصيد متوقع فالسيارة.');
+      for(const key of expectedKeys)if(!submitted.has(key))throw new Error('خاصك تدخل العد الفعلي لجميع المنتجات والدفعات اللي عندها رصيد.');
+      for(const key of submitted.keys())if(!expectedKeys.has(key))throw new Error('كاين منتج أو دفعة فالجرد ما عندهاش رصيد متوقع فالسيارة.');
       let varianceCount=0;
       for(const row of expected.values??[]){
         const key=String(row.product_id)+'|'+String(row.variant_id??'')+'|'+String(row.batch_id??''),counted=submitted.get(key)!;
