@@ -57,4 +57,20 @@ describe('DistributionRepository',()=>{
   expect(db.rollbackTransaction).toHaveBeenCalledOnce();
   expect(db.commitTransaction).not.toHaveBeenCalled();
  });
+ it('reconciles the opening float plus all cash collected during the business day',async()=>{
+  const db=makeDb(sql=>{
+   if(sql.includes('FROM vehicle_day_sessions'))return [{id:'day1',vehicle_id:'v1',opening_odometer:100,opening_cash_minor:2000,expected_cash_minor:2000,status:'open',opened_at:'2026-11-21T08:00:00Z',business_date:'2026-11-21'}];
+   if(sql.includes('FROM stock_locations'))return [{id:'loc-v1'}];
+   if(sql.includes('FROM stock_balances WHERE location_id'))return [];
+   if(sql.includes('FROM cash_sessions'))return [{amount:15000}];
+   return [];
+  });
+  const repo=new DistributionRepository(db,()=> '2026-11-21T18:00:00Z',()=> 'generated');
+  const result=await repo.closeVehicleDay({sessionId:'day1',responsibleUserId:'driver1',closingOdometer:140,countedCashMinor:17000,counts:[]});
+  expect(result).toEqual({cashDifferenceMinor:0,stockVariances:0});
+  expect(db.query).toHaveBeenCalledWith(expect.stringContaining("substr(opened_at,1,10)=?"),['v1','driver1','2026-11-21']);
+  expect(db.run).toHaveBeenCalledWith(expect.stringContaining('SET expected_cash_minor=?'),expect.arrayContaining([17000]));
+  expect(db.commitTransaction).toHaveBeenCalledOnce();
+ });
+
 });
