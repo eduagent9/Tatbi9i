@@ -1009,7 +1009,7 @@ export default function App() {
         </section>
         <DistributionOperationsPanel user={currentUser} users={teamUsers} vehicles={teamVehicles} customers={customers}/>
       </div>}
-      {currentUser&&currentUser.role!=='owner'&&<div className="content-grid"><DistributionOperationsPanel user={currentUser} users={teamUsers} vehicles={teamVehicles} customers={customers}/></div>}
+      {currentUser&&(currentUser.role==='depot_manager'||currentUser.role==='delivery_driver')&&<div className="content-grid"><DistributionOperationsPanel user={currentUser} users={teamUsers} vehicles={teamVehicles} customers={customers}/></div>}
       <footer>تطبيقي · بيانات التطوير محلية على الجهاز · لا تستعملها للمحاسبة الفعلية بعد</footer>
     </main>
   );
