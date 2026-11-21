@@ -146,7 +146,7 @@ export function DistributionOperationsPanel({user,users,vehicles,customers,produ
     <button className="primary-button" disabled={busy||!routeVehicle||customers.length===0}>إنشاء الجولة</button>
    </form>
   </div>}
-  <div className="distribution-subpanel"><h4>الجولات النشيطة</h4><p className="hint">توثيق المحطة كيسجل نتيجة الزيارة واسم المستلم فقط؛ إصدار فاتورة وخصم مخزون التسليم كيبقى من شاشة الطلبات والتسليم.</p>
+  {(canManage||user.role==='delivery_driver')&&<div className="distribution-subpanel"><h4>الجولات النشيطة</h4><p className="hint">توثيق المحطة كيسجل نتيجة الزيارة واسم المستلم فقط؛ إصدار فاتورة وخصم مخزون التسليم كيبقى من شاشة الطلبات والتسليم.</p>
    {driverRoutes.length===0?<p className="hint">ما كايناش جولات مسجلة.</p>:driverRoutes.map(route=><article className="team-row" key={route.id}>
     <div><strong>{route.route_code} · {route.name}</strong><span>{route.planned_date} · {route.vehicle_label} · {route.driver_name}</span><span>الحالة: {statusLabel[route.status]} · {route.stop_count} محطة</span>
     {user.role==='delivery_driver'&&route.status==='planned'&&<button type="button" className="primary-button" disabled={busy} onClick={()=>void action(async()=>{const db=await openAppDatabase();await new DistributionRepository(db).startRoute(route.id,user.id);},'بديتي الجولة.')}>بدء الجولة</button>}
@@ -156,7 +156,7 @@ export function DistributionOperationsPanel({user,users,vehicles,customers,produ
     {user.role==='delivery_driver'&&route.status==='started'&&<button type="button" className="primary-button" disabled={busy||stops.some(s=>s.route_id===route.id&&['pending','arrived'].includes(s.status))} onClick={()=>void action(async()=>{const db=await openAppDatabase();await new DistributionRepository(db).completeRoute(route.id,user.id);},'تسدات الجولة.')}>إغلاق الجولة</button>}
     </div>
    </article>)}
-  </div>
+  </div>}
   {canManage&&<div className="distribution-subpanel"><h4>حسابات الموردين وأداءاتهم</h4>
    {accounts.map(a=><article className="customer-row" key={a.supplier_id}><div><strong>{a.supplier_name}</strong><span>مشتريات {formatMad(a.purchased_minor)} · أداءات {formatMad(a.paid_minor)} · مرتجعات {formatMad(a.returned_minor)}</span></div><strong>المستحق: {formatMad(a.balance_minor)}</strong></article>)}
    <form onSubmit={e=>{e.preventDefault();void action(recordPayment,'تسجل أداء المورد وتحدث الرصيد.');}}>
