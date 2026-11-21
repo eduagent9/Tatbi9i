@@ -20,7 +20,7 @@ export function parseSqliteBackupPayload(value: unknown, expectedDatabase: strin
     throw new Error('هاد الملف ماشي نسخة احتياطية ديال تطبيق تطبيقي.');
   }
   if (!Number.isSafeInteger(candidate.version) || Number(candidate.version) < 1) {
-    throw new Error('إصدار قاعدة البيانات داخل النسخة غير صالح.');
+    throw new Error('الإصدار ديال قاعدة البيانات داخل النسخة غير صالح.');
   }
   return candidate as SqliteBackupPayload;
 }
