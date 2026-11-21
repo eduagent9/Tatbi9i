@@ -1,4 +1,4 @@
-import {useRef,useState} from 'react';
+import {useRef,useState,type PointerEvent} from 'react';
 
 type Props={value:string;onChange:(value:string)=>void};
 
@@ -7,7 +7,7 @@ export function SignaturePad({value,onChange}:Props){
  const canvasRef=useRef<HTMLCanvasElement|null>(null);
  const drawing=useRef(false);
  const [hasInk,setHasInk]=useState(Boolean(value));
- function point(event:React.PointerEvent<HTMLCanvasElement>){const canvas=canvasRef.current!;const rect=canvas.getBoundingClientRect();return {x:(event.clientX-rect.left)*canvas.width/rect.width,y:(event.clientY-rect.top)*canvas.height/rect.height};}
+ function point(event:PointerEvent<HTMLCanvasElement>){const canvas=canvasRef.current!;const rect=canvas.getBoundingClientRect();return {x:(event.clientX-rect.left)*canvas.width/rect.width,y:(event.clientY-rect.top)*canvas.height/rect.height};}
  function start(event:React.PointerEvent<HTMLCanvasElement>){const canvas=canvasRef.current;if(!canvas)return;drawing.current=true;canvas.setPointerCapture(event.pointerId);const ctx=canvas.getContext('2d');if(!ctx)return;const p=point(event);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineWidth=3;ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#183f50';}
  function move(event:React.PointerEvent<HTMLCanvasElement>){if(!drawing.current)return;const canvas=canvasRef.current;if(!canvas)return;const ctx=canvas.getContext('2d');if(!ctx)return;const p=point(event);ctx.lineTo(p.x,p.y);ctx.stroke();setHasInk(true);}
  function finish(){if(!drawing.current)return;drawing.current=false;const canvas=canvasRef.current;if(!canvas)return;onChange(canvas.toDataURL('image/png'));}
