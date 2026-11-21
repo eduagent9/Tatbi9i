@@ -92,7 +92,7 @@ export class ProductRepository {
       if(!current.values?.length)throw new Error('المنتج غير موجود أو مؤرشف.');
       await this.db.run('UPDATE products SET name=?,category=?,subcategory=?,base_unit=?,pieces_per_carton=?,purchase_cost_minor=?,sale_price_minor=?,low_stock_threshold=?,updated_at=? WHERE id=?',
         [name,input.category?.trim()||null,input.subcategory?.trim()||null,unit,pieces,cost,price,threshold,timestamp,id]);
-      await this.db.run('DELETE FROM barcodes WHERE product_id=?',[id]);
+      await this.db.run('DELETE FROM barcodes WHERE product_id=? AND variant_id IS NULL',[id]);
       if(barcode)await this.db.run('INSERT INTO barcodes (id,product_id,barcode,unit,units_per_scan) VALUES (?,?,?,?,?)',[id+':barcode',id,barcode,unit,unit==='carton'?pieces:1]);
       await this.db.run('INSERT INTO audit_events (id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?)',[crypto.randomUUID(),'product.updated','product',id,JSON.stringify({name,category:input.category??null,subcategory:input.subcategory??null,unit,pieces,cost,price,threshold,barcode}),timestamp]);
       await this.db.commitTransaction();
