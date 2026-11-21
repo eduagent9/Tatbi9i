@@ -42,6 +42,8 @@ jobs:
         run: npx cap add android
       - name: Sync native project
         run: npx cap sync android
+      - name: Add Android camera permission
+        run: python3 -c "from pathlib import Path; p=Path('android/app/src/main/AndroidManifest.xml'); s=p.read_text(); marker='<application'; permission='    <uses-permission android:name=\"android.permission.CAMERA\" />\\n'; p.write_text(s if 'android.permission.CAMERA' in s else s.replace(marker, permission+marker, 1))"
       - name: Assemble debug APK
         working-directory: app-v2/android
         run: ./gradlew assembleDebug
