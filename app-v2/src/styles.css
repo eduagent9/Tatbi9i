@@ -56,3 +56,13 @@ form{display:grid;gap:14px}label{display:grid;gap:7px;color:#4c6471;font-size:12
   .invoice-print-totals p:nth-child(3){font-size:16px;border-bottom:2px solid #234e5c}
   .invoice-print-footer{text-align:center;margin-top:40px;color:#526a75;font-size:12px}
 }
+
+.barcode-scan-trigger{margin-top:10px}
+.barcode-scanner-overlay{display:none}
+body.barcode-scanner-active,body.barcode-scanner-active #root,body.barcode-scanner-active .app-shell{background:transparent!important}
+body.barcode-scanner-active .app-shell>*:not(.barcode-scanner-overlay){visibility:hidden!important}
+body.barcode-scanner-active .barcode-scanner-overlay{visibility:visible!important;display:flex;position:fixed;inset:0;z-index:99999;align-items:center;justify-content:center;background:rgba(8,20,26,.16);padding:24px}
+.barcode-scanner-frame{position:relative;width:min(86vw,420px);height:230px;border:2px solid #fff;border-radius:18px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:24px;color:#fff;text-align:center;text-shadow:0 1px 4px #000}
+.barcode-scanner-frame>span:first-child{background:rgba(0,0,0,.65);padding:9px 14px;border-radius:8px}
+.barcode-scanner-frame .secondary-button{background:#fff;color:#17323d;text-shadow:none}
+.barcode-scanner-corners{position:absolute;inset:22% 8%;border:2px solid #8be0c3;border-radius:8px;pointer-events:none}
