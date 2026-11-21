@@ -18,6 +18,7 @@ import { DataBackupPanel } from './operations/DataBackupPanel';
 import { DistributionOperationsPanel } from './operations/DistributionOperationsPanel';
 import { PersonalOrdersPanel } from './operations/PersonalOrdersPanel';
 import { SupplierAccountsPanel } from './operations/SupplierAccountsPanel';
+import { DailyCashPanel } from './operations/DailyCashPanel';
 import { InvoiceArchivePanel } from './operations/InvoiceArchivePanel';
 import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
 
@@ -961,6 +962,7 @@ export default function App() {
             <button className="primary-button" disabled={saving}>{saving ? 'كيتسجل المصروف...' : 'حفظ المصروف'}</button>
           </form>
         </section>
+        <DailyCashPanel ownerId={currentUser.id}/>
         <section data-section="inventory" className="panel alerts-panel"><div className="panel-heading"><div><h3>تنبيهات المخزون والصلاحية</h3><p>مراقبة النقص والدفعات اللي قربات تسالي</p></div><span className="step-mark">08</span></div>
           <div className="alert-group"><h4>مخزون منخفض</h4>
             {products.filter(product => product.low_stock_threshold > 0 && product.total_stock <= product.low_stock_threshold).length === 0
