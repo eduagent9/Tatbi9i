@@ -68,12 +68,14 @@ export default function App() {
   const [outstandingInvoices, setOutstandingInvoices] = useState<OutstandingInvoice[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
   const [supplierName, setSupplierName] = useState('');
+  const [editingSupplierId,setEditingSupplierId]=useState<string|null>(null);
   const [supplierPhone, setSupplierPhone] = useState('');
   const [purchaseSupplierId, setPurchaseSupplierId] = useState('');
   const [purchaseLines, setPurchaseLines] = useState<Array<{productId:string;quantity:string;unitCost:string;batchCode:string;expiryDate:string}>>([{productId:'',quantity:'1',unitCost:'',batchCode:'',expiryDate:''}]);
   const [collectionInvoiceId, setCollectionInvoiceId] = useState('');
   const [collectionAmount, setCollectionAmount] = useState('');
   const [customerName, setCustomerName] = useState('');
+  const [editingCustomerId,setEditingCustomerId]=useState<string|null>(null);
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerCity, setCustomerCity] = useState('');
   const [saleCustomerId, setSaleCustomerId] = useState('');
@@ -541,12 +543,12 @@ export default function App() {
     setError(''); setNotice(''); setSaving(true);
     try {
       const db = await openAppDatabase();
-      await new CustomerRepository(db).create({
-        id: crypto.randomUUID(), name: customerName, phone: customerPhone, city: customerCity,
-      });
-      setCustomers(await new CustomerRepository(db).list());
-      setCustomerName(''); setCustomerPhone(''); setCustomerCity('');
-      setNotice('تسجل الزبون بنجاح.');
+      const repo=new CustomerRepository(db);
+      const input={id:editingCustomerId??crypto.randomUUID(),name:customerName,phone:customerPhone,city:customerCity};
+      if(editingCustomerId)await repo.update(input);else await repo.create(input);
+      setCustomers(await repo.list());
+      setCustomerName('');setCustomerPhone('');setCustomerCity('');setEditingCustomerId(null);
+      setNotice(editingCustomerId?'تحدّث ملف الزبون.':'تسجل الزبون بنجاح.');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر حفظ الزبون.'); }
     finally { setSaving(false); }
   }
@@ -575,10 +577,11 @@ export default function App() {
     setError(''); setNotice(''); setSaving(true);
     try {
       const db = await openAppDatabase();
-      await new SupplierRepository(db).create({ id: crypto.randomUUID(), name: supplierName, phone: supplierPhone });
-      setSuppliers(await new SupplierRepository(db).list());
-      setSupplierName(''); setSupplierPhone('');
-      setNotice('تسجل المورد بنجاح.');
+      const repo=new SupplierRepository(db),input={id:editingSupplierId??crypto.randomUUID(),name:supplierName,phone:supplierPhone};
+      if(editingSupplierId)await repo.update(input);else await repo.create(input);
+      setSuppliers(await repo.list());
+      setSupplierName('');setSupplierPhone('');setEditingSupplierId(null);
+      setNotice(editingSupplierId?'تحدّث ملف المورد.':'تسجل المورد بنجاح.');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر حفظ المورد.'); }
     finally { setSaving(false); }
   }
@@ -924,7 +927,7 @@ export default function App() {
             <div className="two-cols"><label>الهاتف<input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="اختياري" /></label><label>المدينة<input value={customerCity} onChange={e => setCustomerCity(e.target.value)} placeholder="مثلاً برشيد" /></label></div>
             <button className="primary-button" disabled={saving}>{saving ? 'كيتم الحفظ...' : 'إضافة الزبون'}</button>
           </form>
-          <div className="customer-list">{customers.length === 0 ? <p className="hint">مازال ما تسجل حتى زبون.</p> : customers.map(customer => <article className="customer-row" key={customer.id}><div><strong>{customer.name}</strong><span>{customer.phone || customer.city || 'بدون معلومات إضافية'}</span></div><div><strong>{formatMad(customer.debt_minor)}</strong><span>الدين · {customer.invoice_count} فاتورة</span></div></article>)}</div>
+          <div className="customer-list">{customers.length === 0 ? <p className="hint">مازال ما تسجل حتى زبون.</p> : customers.map(customer => <article className="customer-row" key={customer.id}><div><strong>{customer.name}</strong><span>{customer.phone || customer.city || 'بدون معلومات إضافية'}</span></div><div><strong>{formatMad(customer.debt_minor)}</strong><span>الدين · {customer.invoice_count} فاتورة</span></div><button type="button" className="secondary-button" onClick={()=>{if(!requirePermission('manage_customers'))return;setEditingCustomerId(customer.id);setCustomerName(customer.name);setCustomerPhone(customer.phone??'');setCustomerCity(customer.city??'');setActiveSection('relations');}}>تعديل</button></article>)}</div>
         </section>
         <section data-section="inventory" className="panel movement-panel"><div className="panel-heading"><div><h3>سجل حركة المخزون</h3><p>آخر الحركات المسجلة بالتاريخ والوجهة</p></div><span className="step-mark">11</span></div>
           {movementHistory.length===0 ? <p className="hint">مازال ما تسجلات حتى حركة.</p> : <div className="movement-list">{movementHistory.map(movement=><article className="movement-row" key={movement.id}>
@@ -971,7 +974,7 @@ export default function App() {
             <label>الهاتف<input value={supplierPhone} onChange={e => setSupplierPhone(e.target.value)} placeholder="اختياري" /></label>
             <button className="secondary-button" disabled={saving}>{saving ? 'كيتم الحفظ...' : 'إضافة المورد'}</button>
           </form>
-          <div className="supplier-list">{suppliers.map(supplier => <article className="customer-row" key={supplier.id}><div><strong>{supplier.name}</strong><span>{supplier.phone || 'بدون هاتف'}</span></div><div><strong>{formatMad(supplier.purchased_minor)}</strong><span>{supplier.receipt_count} وصل شراء</span></div></article>)}</div>
+          <div className="supplier-list">{suppliers.map(supplier => <article className="customer-row" key={supplier.id}><div><strong>{supplier.name}</strong><span>{supplier.phone || 'بدون هاتف'}</span></div><div><strong>{formatMad(supplier.purchased_minor)}</strong><span>{supplier.receipt_count} وصل شراء</span></div><button type="button" className="secondary-button" onClick={()=>{if(!requirePermission('manage_purchases'))return;setEditingSupplierId(supplier.id);setSupplierName(supplier.name);setSupplierPhone(supplier.phone??'');setActiveSection('purchases');}}>تعديل</button></article>)}</div>
           <div className="section-divider"></div>
           <form onSubmit={submitPurchase}>
             <label>المورد<select required value={purchaseSupplierId} onChange={e => setPurchaseSupplierId(e.target.value)}><option value="">اختار المورد</option>{suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label>
