@@ -1026,7 +1026,7 @@ export default function App() {
         <InvoiceArchivePanel onSelect={invoice=>setLastInvoice(invoice)}/>
         <DistributionOperationsPanel user={currentUser} users={teamUsers} vehicles={teamVehicles} customers={customers} products={products}/>
       </div>}
-      {currentUser&&(currentUser.role==='depot_manager'||currentUser.role==='delivery_driver')&&<div className="content-grid">{currentUser.role==='depot_manager'&&<InvoiceArchivePanel onSelect={invoice=>setLastInvoice(invoice)}/>}<DistributionOperationsPanel user={currentUser} users={teamUsers} vehicles={teamVehicles} customers={customers} products={products}/></div>}
+      {currentUser&&(currentUser.role==='depot_manager'||currentUser.role==='delivery_driver'||currentUser.role==='van_sales')&&<div className="content-grid">{currentUser.role==='depot_manager'&&<InvoiceArchivePanel onSelect={invoice=>setLastInvoice(invoice)}/>}<DistributionOperationsPanel user={currentUser} users={teamUsers} vehicles={teamVehicles} customers={customers} products={products}/></div>}
       <footer>تطبيقي · بيانات التطوير محلية على الجهاز · لا تستعملها للمحاسبة الفعلية بعد</footer>
     </main>
   );
