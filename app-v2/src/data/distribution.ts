@@ -152,6 +152,52 @@ export class DistributionRepository {
     }catch(error){await this.db.rollbackTransaction().catch(()=>undefined);throw error;}
   }
 
+
+  async createSupplierReturn(input:{id:string;supplierId:string;purchaseReceiptId?:string|null;referenceNumber?:string;reason:string;processedBy:string;lines:Array<{productId:string;variantId?:string|null;batchId?:string|null;quantity:number;unitCostMinor:number}>}):Promise<{totalMinor:number;lineCount:number}>{
+    const supplierId=required(input.supplierId,'المورد'),actor=required(input.processedBy,'المستخدم'),reason=required(input.reason,'سبب الإرجاع');
+    if(!input.lines.length)throw new Error('الإرجاع خاصو يحتوي على منتج واحد على الأقل.');
+    const prepared=input.lines.map(line=>{
+      const qty=quantity(line.quantity,'كمية الإرجاع');if(qty<=0)throw new RangeError('كمية الإرجاع خاصها تكون أكبر من صفر.');
+      if(!Number.isSafeInteger(line.unitCostMinor)||line.unitCostMinor<0)throw new RangeError('تكلفة الإرجاع غير صالحة.');
+      return {...line,quantity:qty,variantId:line.variantId??null,batchId:line.batchId??null,lineTotalMinor:Math.round(qty*line.unitCostMinor)};
+    });
+    const totalMinor=prepared.reduce((sum,line)=>sum+line.lineTotalMinor,0);
+    if(!Number.isSafeInteger(totalMinor))throw new RangeError('مجموع الإرجاع كبير بزاف.');
+    const now=this.now();await this.db.beginTransaction();
+    try{
+      const supplier=await this.db.query('SELECT id FROM suppliers WHERE id=?',[supplierId]);
+      if(!supplier.values?.length)throw new Error('المورد غير موجود.');
+      if(input.purchaseReceiptId){
+        const receipt=await this.db.query('SELECT id FROM purchase_receipts WHERE id=? AND supplier_id=?',[input.purchaseReceiptId,supplierId]);
+        if(!receipt.values?.length)throw new Error('وصل الشراء لا يخص المورد المختار.');
+      }
+      const headerId=required(input.id,'معرّف الإرجاع');
+      await this.db.run('INSERT INTO supplier_returns (id,supplier_id,purchase_receipt_id,reference_number,total_minor,reason,processed_by,processed_at,created_at) VALUES (?,?,?,?,?,?,?,?,?)',[headerId,supplierId,input.purchaseReceiptId??null,input.referenceNumber?.trim()||null,totalMinor,reason,actor,now,now]);
+      let lineCount=0;
+      for(const line of prepared){
+        const balances=await this.db.query(`SELECT sb.id,sb.batch_id,sb.quantity,p.name AS product_name
+          FROM stock_balances sb JOIN products p ON p.id=sb.product_id
+          WHERE sb.product_id=? AND sb.variant_id IS ? AND sb.location_id='loc-depot-main' AND sb.quantity>0
+            AND (? IS NULL OR sb.batch_id=?)
+          ORDER BY sb.updated_at,sb.id`,[line.productId,line.variantId,line.batchId,line.batchId]);
+        const rows=balances.values??[],available=rows.reduce((sum,row)=>sum+Number(row.quantity),0);
+        if(available+1e-9<line.quantity)throw new Error('المخزون المتوفر فالديبو ما كافيش لإرجاع المنتج للمورد.');
+        let remaining=line.quantity;
+        for(const balance of rows){
+          if(remaining<=1e-9)break;
+          const take=Math.min(remaining,Number(balance.quantity));
+          await this.db.run('UPDATE stock_balances SET quantity=?,updated_at=? WHERE id=?',[Number(balance.quantity)-take,now,balance.id]);
+          const lineTotal=Math.round(take*line.unitCostMinor);
+          await this.db.run('INSERT INTO supplier_return_lines (id,supplier_return_id,product_id,batch_id,quantity,unit_cost_minor,line_total_minor,product_name_snapshot) VALUES (?,?,?,?,?,?,?,?)',[this.makeId(),headerId,line.productId,balance.batch_id??null,take,line.unitCostMinor,lineTotal,String(balance.product_name)]);
+          await this.db.run("INSERT INTO stock_movements (id,product_id,variant_id,batch_id,from_location_id,to_location_id,quantity,movement_type,reference_type,reference_id,performed_by,responsible_user_id,occurred_at,note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",[this.makeId(),line.productId,line.variantId,balance.batch_id??null,'loc-depot-main',null,take,'supplier_return','supplier_return',headerId,actor,actor,now,'إرجاع للمورد: '+reason]);
+          remaining-=take;lineCount++;
+        }
+      }
+      await this.db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[this.makeId(),actor,'supplier.return_created','supplier_return',headerId,JSON.stringify({supplierId,totalMinor,lineCount,reason}),now]);
+      await this.db.commitTransaction();return {totalMinor,lineCount};
+    }catch(error){await this.db.rollbackTransaction().catch(()=>undefined);throw error;}
+  }
+
   async listCustomerAging():Promise<CustomerAgingRow[]>{
     const result=await this.db.query(`SELECT c.id AS customer_id,c.name AS customer_name,
       COALESCE(SUM(CASE WHEN julianday('now')-julianday(COALESCE(i.confirmed_at,i.created_at))<=0 THEN i.total_minor-i.collected_minor ELSE 0 END),0) AS current_minor,
