@@ -145,15 +145,18 @@ export async function openAppDatabase(
   if (opening) return opening;
 
   opening = (async () => {
-    const db = await factory.open(APP_DATABASE_NAME);
+    let db: SqliteExecutor | null = null;
     try {
+      db = await factory.open(APP_DATABASE_NAME);
       await applyMigrations(db, APP_MIGRATIONS);
       active = db;
       return db;
     } catch (error) {
-      await factory.close(APP_DATABASE_NAME).catch(() => undefined);
+      if (db) await factory.close(APP_DATABASE_NAME).catch(() => undefined);
       throw error;
     } finally {
+      // Clear the single-flight promise even when the native connection itself
+      // fails to open, so a later user retry can attempt a fresh connection.
       opening = null;
     }
   })();
