@@ -98,8 +98,14 @@ export class SalesRepository {
           [Number(line.product.purchase_cost_minor),line.product.id,line.variantId,locationId],
         );
         const available = (balances.values ?? []) as unknown as BalanceRow[];
-        const totalAvailable = available.reduce((sum,row)=>sum+Number(row.quantity),0);
-        if (totalAvailable + 1e-9 < line.quantity) throw new Error('المخزون غير كافٍ للمنتج: ' + line.product.name);
+        const totalOnHand = available.reduce((sum,row)=>sum+Number(row.quantity),0);
+        const reservedResult = await this.db.query(\`SELECT COALESCE(SUM(quantity-fulfilled_quantity),0) AS quantity
+          FROM sales_order_reservations WHERE product_id=? AND variant_id IS ? AND location_id=?
+            AND status='active' AND (? IS NULL OR order_id<>?)\`,
+          [line.product.id,line.variantId,locationId,input.orderId??null,input.orderId??null]);
+        const reservedByOtherOrders = Number(reservedResult.values?.[0]?.quantity??0);
+        const totalAvailable = Math.max(0,totalOnHand-reservedByOtherOrders);
+        if (totalAvailable + 1e-9 < line.quantity) throw new Error('المخزون المتاح بعد حجوزات الطلبات غير كافٍ للمنتج: ' + line.product.name);
 
         let remaining = line.quantity;
         const allocations: Array<{ batchId: string | null; quantity: number; unitCostMinor: number }> = [];
