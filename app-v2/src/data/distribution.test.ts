@@ -98,4 +98,12 @@ describe('DistributionRepository',()=>{
   expect(db.commitTransaction).not.toHaveBeenCalled();
  });
 
+ it('opens a van-sales vehicle day with opening float and assigned seller',async()=>{
+  const db=makeDb(sql=>sql.includes('FROM vehicles WHERE id=?')?[{id:'van1',vehicle_type:'van_sales',assigned_user_id:'seller1'}]:[]);
+  const repo=new DistributionRepository(db,()=> '2026-11-21T08:00:00Z',()=> 'generated');
+  await repo.startVehicleDay({id:'day1',vehicleId:'van1',responsibleUserId:'seller1',businessDate:'2026-11-21',openingCashMinor:1000,expectedCashMinor:2500});
+  expect(db.run).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO vehicle_day_sessions'),expect.arrayContaining([1000,3500]));
+  expect(db.commitTransaction).toHaveBeenCalledOnce();
+ });
+
 });
