@@ -16,6 +16,7 @@ import { ReportsRepository, type FinancialSummary } from './data/reports';
 import { StockAndReturnsPanel } from './operations/StockAndReturnsPanel';
 import { DataBackupPanel } from './operations/DataBackupPanel';
 import { DistributionOperationsPanel } from './operations/DistributionOperationsPanel';
+import { InvoiceArchivePanel } from './operations/InvoiceArchivePanel';
 import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
 
 const emptyForm = { name: '', category: 'مواد غذائية', subcategory: '', unit: 'piece' as 'piece' | 'carton', pieces: '12', cost: '', price: '', threshold: '0', barcode: '' };
@@ -1007,9 +1008,10 @@ export default function App() {
           <div className="section-divider"></div><h4>جلسات التحصيل</h4>
           {cashSessions.length===0?<p className="hint">مازال ما تسجل حتى تحصيل نقدي من عمليات التوصيل.</p>:cashSessions.map(session=><article className="team-row" key={session.id}><div><strong>{session.user_name} · {session.vehicle_label||'بدون سيارة'}</strong><span>المفروض: {formatMad(session.expected_cash_minor)} · تسلم: {formatMad(session.handed_cash_minor)} · باقي: {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</span><span>الحالة: {session.status==='open'?'مفتوحة':session.status==='submitted'?'تسلمات للديبو':'تمت المطابقة'}</span>{session.status==='reconciled'&&<span>النقد المعدود: {formatMad(Number(session.counted_cash_minor??0))} · الفرق: {formatSignedMad(Number(session.counted_cash_minor??0)-Number(session.expected_cash_minor))}{session.discrepancy_reason?' · السبب: '+session.discrepancy_reason:''}</span>}{session.status==='submitted'&&<div className="order-actions"><label>النقد المعدود فعلياً (DH)<input type="number" min="0" step="0.01" value={cashCountedAmounts[session.id]??''} onChange={e=>setCashCountedAmounts(current=>({...current,[session.id]:e.target.value}))}/></label><label>سبب الفرق إذا ما تطابقش<input value={cashDiscrepancyReasons[session.id]??''} onChange={e=>setCashDiscrepancyReasons(current=>({...current,[session.id]:e.target.value}))} placeholder="مثلاً: نقص نقدي أو خطأ فالعد"/></label><button type="button" className="secondary-button" disabled={saving} onClick={()=>reconcileCashSession(session)}>تأكيد المطابقة</button></div>}</div></article>)}
         </section>
+        <InvoiceArchivePanel onSelect={invoice=>setLastInvoice(invoice)}/>
         <DistributionOperationsPanel user={currentUser} users={teamUsers} vehicles={teamVehicles} customers={customers}/>
       </div>}
-      {currentUser&&(currentUser.role==='depot_manager'||currentUser.role==='delivery_driver')&&<div className="content-grid"><DistributionOperationsPanel user={currentUser} users={teamUsers} vehicles={teamVehicles} customers={customers}/></div>}
+      {currentUser&&(currentUser.role==='depot_manager'||currentUser.role==='delivery_driver')&&<div className="content-grid">{currentUser.role==='depot_manager'&&<InvoiceArchivePanel onSelect={invoice=>setLastInvoice(invoice)}/>}<DistributionOperationsPanel user={currentUser} users={teamUsers} vehicles={teamVehicles} customers={customers}/></div>}
       <footer>تطبيقي · بيانات التطوير محلية على الجهاز · لا تستعملها للمحاسبة الفعلية بعد</footer>
     </main>
   );
