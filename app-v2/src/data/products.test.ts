@@ -46,7 +46,7 @@ describe('ProductRepository', () => {
     const db=fakeDb(),repo=new ProductRepository(db,()=> '2026-11-21T12:00:00.000Z');
     await repo.update({id:'p1',name:'ماء جديد',purchaseCostMinor:260,salePriceMinor:400,barcode:'6119999'});
     expect(db.run).toHaveBeenCalledWith(expect.stringContaining('UPDATE products'),expect.arrayContaining(['ماء جديد']));
-    expect(db.run).toHaveBeenCalledWith(expect.stringContaining('DELETE FROM barcodes'),['p1']);
+    expect(db.run).toHaveBeenCalledWith(expect.stringContaining('DELETE FROM barcodes WHERE product_id=? AND variant_id IS NULL'),['p1']);
     expect(db.run).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO barcodes'),['p1:barcode','p1','6119999','piece',1]);
     expect(db.commitTransaction).toHaveBeenCalledOnce();
   });
