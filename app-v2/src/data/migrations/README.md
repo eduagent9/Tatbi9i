@@ -16,6 +16,11 @@ The initial schema and append-only migrations are wired into the Capacitor SQLit
 3. `003_purchases.sql`: supplier purchase receipts and line snapshots.
 4. `004_local_owner.sql`: local owner operational profile for offline first-run sales; this is not authentication.
 5. `005_expenses.sql`: operating expense ledger.
+6. `006_stock_counts.sql`: stocktake headers and lines.
+7. `007_return_traceability.sql`: invoice-line and batch references on returns.
+8. `008_invoice_batch_allocations.sql`: exact FEFO batch quantities consumed by invoice lines.
+9. `009_user_pin_auth.sql`: salted PIN credentials for local user authentication.
+10. `010_distribution_operations.sql`: customer credit limits, route plans and ordered stops, delivery proof metadata, vehicle day settlement and stock counts, supplier payments and supplier returns.
 
 Never edit a migration that may have shipped. Add the next sequential migration instead.
 
@@ -33,6 +38,3 @@ Never delete confirmed financial or stock history. Corrections must be represent
 - No import should start until a dry-run report reconciles counts, totals, links, payments, returns, and purchase history.
 - Runtime persistence, backup/restore, and SQLCipher/plugin licensing still require validation on a real Android device.
 
-6. `006_stock_counts.sql`: stocktake headers and lines.
-7. `007_return_traceability.sql`: invoice-line and batch references on returns.
-8. `008_invoice_batch_allocations.sql`: records the exact FEFO batch quantities consumed by every invoice line, so later returns can be traced to the original batch.
