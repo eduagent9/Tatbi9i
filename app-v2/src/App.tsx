@@ -208,6 +208,12 @@ export default function App() {
       if(!Number.isSafeInteger(subtotal))throw new Error('مجموع الطلب كبير بزاف.');
       await db.beginTransaction();
       try{
+        const customer=await db.query('SELECT id FROM customers WHERE id=? AND is_active=1',[orderCustomerId]);
+        if(!customer.values?.length)throw new Error('الزبون غير موجود أو غير نشيط؛ حدّث اللائحة قبل تسجيل الطلب.');
+        if(orderVehicleId){
+          const vehicle=await db.query("SELECT id FROM vehicles WHERE id=? AND vehicle_type='delivery' AND is_active=1",[orderVehicleId]);
+          if(!vehicle.values?.length)throw new Error('سيارة التوصيل المختارة غير صالحة أو غير نشيطة.');
+        }
         await db.run('INSERT INTO sales_orders (id,order_number,customer_id,created_by,assigned_vehicle_id,status,subtotal_minor,offer_discount_minor,total_minor,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',[id,number,orderCustomerId,currentUser.id,orderVehicleId||null,'submitted',subtotal,0,subtotal,now,now]);
         for(const line of prepared)await db.run('INSERT INTO sales_order_lines (id,order_id,product_id,quantity,unit_price_minor,line_total_minor,product_name_snapshot,unit_snapshot) VALUES (?,?,?,?,?,?,?,?)',[crypto.randomUUID(),id,line.productId,line.quantity,line.price,line.total,line.name,line.unit]);
         await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),currentUser.id,'order.submitted','sales_order',id,JSON.stringify({number,subtotal,lines:prepared.length}),now]);
