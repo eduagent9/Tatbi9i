@@ -7,7 +7,7 @@ import {DistributionRepository,type CustomerAgingRow,type SupplierAccountRow} fr
 type User={id:string;display_name:string;role:AppRole;is_active:number};
 type Vehicle={id:string;code:string;label:string;vehicle_type:'van_sales'|'delivery';assigned_user_id:string|null;assigned_name?:string|null};
 type Customer={id:string;name:string};
-type RouteRow={id:string;route_code:string;name:string;planned_date:string;vehicle_label:string;driver_name:string;status:'planned'|'started'|'completed'|'cancelled';stop_count:number};
+type RouteRow={id:string;route_code:string;name:string;planned_date:string;vehicle_label:string;driver_user_id:string;driver_name:string;status:'planned'|'started'|'completed'|'cancelled';stop_count:number};
 type StopRow={id:string;route_id:string;stop_order:number;customer_id:string;customer_name:string;order_id:string|null;status:string;failure_reason:string|null};
 type VehicleStockRow={product_id:string;product_name:string;variant_id:string|null;variant_name:string|null;batch_id:string|null;batch_code:string|null;quantity:number};
 type Props={user:User;users:User[];vehicles:Vehicle[];customers:Customer[]};
@@ -119,7 +119,7 @@ export function DistributionOperationsPanel({user,users,vehicles,customers}:Prop
   setNotice('تسدات جلسة السيارة. فرق النقدية: '+formatMad(result.cashDifferenceMinor)+' · اختلافات المخزون: '+result.stockVariances);
  }
 
- const driverRoutes=useMemo(()=>routes.filter(r=>user.role==='delivery_driver'?r.driver_name===user.display_name:true),[routes,user]);
+ const driverRoutes=useMemo(()=>routes.filter(r=>user.role==='delivery_driver'?r.driver_user_id===user.id:true),[routes,user]);
  return <section data-section="distribution" className="panel distribution-operations">
   <div className="panel-heading"><div><h3>التوزيع والجولات وتسوية السيارات</h3><p>مسارات الزيارات، إثبات التسليم، حسابات الموردين والديون</p></div><span className="step-mark">التوزيع</span></div>
   {error&&<p className="message error" role="alert">{error}</p>}{notice&&<p className="message success" role="status">{notice}</p>}
@@ -156,7 +156,7 @@ export function DistributionOperationsPanel({user,users,vehicles,customers}:Prop
    {customers.map(customer=><div className="credit-limit-row" key={customer.id}><strong>{customer.name}</strong><label>السقف (DH)<input type="number" min="0" step="0.01" value={creditLimits[customer.id]??'0'} onChange={e=>setCreditLimits(x=>({...x,[customer.id]:e.target.value}))}/></label><button type="button" className="secondary-button" disabled={busy} onClick={()=>void action(()=>saveLimit(customer.id),'تحدث سقف الدين. 0 كيعني بلا سقف محدد.')}>حفظ</button></div>)}
    <p className="hint">السقف 0 يعني غير محدد. إذا حددتي سقفاً، البيع الجديد بالدين كيرفض تجاوزه.</p>
   </div>}
-  <div className="distribution-subpanel"><h4>تقادم ديون الزبناء</h4>
+  {(user.role==='owner'||user.role==='depot_manager')&&<div className="distribution-subpanel"><h4>تقادم ديون الزبناء</h4>
    {aging.filter(a=>a.total_due_minor>0).map(a=><article className="customer-row" key={a.customer_id}><div><strong>{a.customer_name}</strong><span>حالي {formatMad(a.current_minor)} · 1–30 يوم {formatMad(a.days_1_30_minor)} · 31–60 يوم {formatMad(a.days_31_60_minor)} · 61–90 يوم {formatMad(a.days_61_90_minor)} · أكثر من 90 يوم {formatMad(a.over_90_minor)}</span></div><strong>{formatMad(a.total_due_minor)}</strong></article>)}
    {aging.every(a=>a.total_due_minor===0)&&<p className="hint">ما كايناش ديون مستحقة.</p>}
   </div>
