@@ -9,9 +9,9 @@
 7. Returns record sellable/damaged/expired/shortage condition; only approved sellable returns enter saleable stock.
 8. Cash handover has a unique receipt and both responsible users.
 9. Re-import of identical source fingerprint is idempotent.
-10. Offline writes remain local and queued when sync fails.
+10. Offline writes remain local. Multi-device sync is explicitly unavailable until a backend, outbox worker, retry policy, and conflict-resolution protocol are implemented and tested.
 11. Close/reopen and backup/restore preserve records and totals.
 12. Failed multi-table transactions leave no partial financial or stock records.
 13. Legacy JSON validation flags malformed collections, duplicate IDs, and unresolved payment/return invoice references without changing source data.
 
-These are acceptance requirements, not claims that all tests have passed.
+These are acceptance requirements, not claims that all tests have passed. Migration 010 currently supplies database structures for route stops, delivery proof metadata, vehicle-day settlement, customer credit limits, supplier payments, and supplier returns; UI workflows and transaction services for those new structures remain release requirements.
