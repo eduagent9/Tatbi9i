@@ -16,6 +16,7 @@ import distributionOperationsSchema from './migrations/010_distribution_operatio
 import variantVehicleCountsSchema from './migrations/011_variant_vehicle_counts.sql?raw';
 import personalOrdersSchema from './migrations/012_personal_orders_and_product_images.sql?raw';
 import dailyCashSchema from './migrations/013_daily_cash_closing.sql?raw';
+import productGallerySchema from './migrations/014_product_gallery.sql?raw';
 
 export interface SqliteExecutor {
   execute(statement: string): Promise<unknown>;
@@ -78,6 +79,7 @@ export const APP_MIGRATIONS: Migration[] = [
   { version: 11, name: 'variant_vehicle_counts', sql: variantVehicleCountsSchema },
   { version: 12, name: 'personal_orders_and_product_images', sql: personalOrdersSchema },
   { version: 13, name: 'daily_cash_closing', sql: dailyCashSchema },
+  { version: 14, name: 'product_gallery', sql: productGallerySchema },
 ];
 
 export async function applyMigrations(
