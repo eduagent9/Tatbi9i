@@ -31,10 +31,25 @@
  .nav button{padding:9px 10px;font-size:11px}
  .nav button span{font-size:14px}
 }
+
+/* Six clear business sections with contextual horizontal sub-navigation */
+.side{display:block!important;position:sticky;top:0;z-index:9;height:auto;padding:8px 14px 0;background:var(--nav);box-shadow:0 5px 18px #10182718}
+.brand,.sidefoot{display:none!important}
+.navgroups{display:flex;align-items:center;gap:7px;overflow-x:auto;overflow-y:hidden;padding:2px 1px 8px;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+.navgroups .groupbtn{display:inline-flex;align-items:center;gap:7px;flex:0 0 auto;white-space:nowrap;background:transparent;color:#c4ccda;padding:10px 14px;border-radius:11px}
+.navgroups .groupbtn.active{background:#394968;color:#fff;box-shadow:inset 0 0 0 1px #ffffff18}
+.subnav{display:flex!important;flex-direction:row;align-items:center;gap:6px;max-width:100%;overflow-x:auto;overflow-y:hidden;padding:0 1px 9px;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+.subnav button{display:inline-flex;align-items:center;gap:7px;flex:0 0 auto;white-space:nowrap;text-align:center;border-radius:10px;padding:8px 12px;background:#202d43;color:#c4ccda}
+.subnav button.active{background:#eef0ff;color:#34309c}
+.subnav button span{width:auto;min-width:18px;text-align:center}
+.main{padding:22px clamp(14px,3vw,38px) 40px}
+.mobilebar{display:none!important}
+@media(max-width:900px){.side{padding:7px 9px 0}.navgroups{gap:4px}.navgroups .groupbtn{padding:9px 11px;font-size:12px}.subnav{gap:4px;padding-bottom:7px}.subnav button{padding:8px 10px;font-size:12px}.main{padding:15px 12px 35px}}
+@media(max-width:480px){.navgroups .groupbtn{padding:9px 10px;font-size:11px}.subnav button{padding:8px 9px;font-size:11px}}
 </style></head>
 <body>
 <div class="shell">
-<aside class="side"><div class="brand"><div class="brandmark">✦</div><div><strong>تطبيقي</strong><small>التسيير التجاري والمخزون</small></div></div><nav class="nav" id="sidenav"></nav><div class="sidefoot">نسخة أولية مستقلة · تعمل محلياً</div></aside>
+<aside class="side"><div class="brand"><div class="brandmark">✦</div><div><strong>تطبيقي</strong><small>التسيير التجاري والمخزون</small></div></div><div class="navgroups" id="groupnav" aria-label="الأقسام الرئيسية"></div><nav class="nav subnav" id="sidenav" aria-label="صفحات القسم"></nav><div class="sidefoot">نسخة أولية مستقلة · تعمل محلياً</div></aside>
 <main class="main">
 <header class="top"><div><h1 id="pagetitle">لوحة القيادة</h1><p id="today"></p></div><div class="topactions"><span class="pill">● وضع محلي</span><button onclick="openProduct()">＋ منتج جديد</button></div></header>
 <section class="page active" id="dashboard">
@@ -72,8 +87,34 @@ function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 function id(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 function toast(t){let x=document.getElementById('toast');x.textContent=t;x.classList.add('show');setTimeout(()=>x.classList.remove('show'),2300)}
 const pages=[['dashboard','لوحة القيادة','⌂'],['products','المنتجات','▦'],['pos','نقطة البيع','＋'],['invoices','الفواتير','▤'],['inventory','المخزون','▣'],['people','الزبناء والموردون','♙'],['purchases','التوريدات','📦'],['expenses','المصاريف','−'],['reports','التقارير','▥'],['settings','الإعدادات','⚙']];
-function buildNav(){['sidenav','mobilenav'].forEach(n=>{document.getElementById(n).innerHTML=pages.map(p=>'<button data-page="'+p[0]+'" onclick="go(\''+p[0]+'\')"><span>'+p[2]+'</span>'+p[1]+'</button>').join('')})}
-function go(page){document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id===page));document.querySelectorAll('[data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===page));document.getElementById('pagetitle').textContent=(pages.find(x=>x[0]===page)||pages[0])[1];if(page==='pos')renderPos()}
+const pageGroups=[
+ {id:'home',label:'الرئيسية',icon:'⌂',pages:['dashboard']},
+ {id:'sales',label:'المبيعات',icon:'🧾',pages:['pos','invoices']},
+ {id:'stock',label:'المخزون',icon:'▦',pages:['products','inventory']},
+ {id:'buying',label:'المشتريات',icon:'📦',pages:['purchases']},
+ {id:'relations',label:'العلاقات',icon:'♙',pages:['people']},
+ {id:'admin',label:'الإدارة',icon:'⚙',pages:['expenses','reports','settings']}
+];
+function groupForPage(page){return pageGroups.find(g=>g.pages.includes(page))||pageGroups[0]}
+function buildNav(){
+ const groupNav=document.getElementById('groupnav');
+ groupNav.innerHTML=pageGroups.map(g=>'<button class="groupbtn" data-group="'+g.id+'" onclick="goGroup(\\''+g.id+'\\')"><span>'+g.icon+'</span>'+g.label+'</button>').join('');
+ renderSubnav('dashboard');
+}
+function renderSubnav(page){
+ const group=groupForPage(page),nav=document.getElementById('sidenav');
+ nav.innerHTML=group.pages.map(id=>{const p=pages.find(x=>x[0]===id);return '<button data-page="'+p[0]+'" onclick="go(\\''+p[0]+'\\')"><span>'+p[2]+'</span>'+p[1]+'</button>'}).join('');
+ document.querySelectorAll('[data-group]').forEach(x=>x.classList.toggle('active',x.dataset.group===group.id));
+ document.querySelectorAll('[data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===page));
+}
+function goGroup(groupId){const group=pageGroups.find(g=>g.id===groupId)||pageGroups[0];go(group.pages[0])}
+function go(page){
+ const target=pages.some(x=>x[0]===page)?page:'dashboard';
+ document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id===target));
+ renderSubnav(target);
+ document.getElementById('pagetitle').textContent=(pages.find(x=>x[0]===target)||pages[0])[1];
+ if(target==='pos')renderPos();
+}
 function showModal(title,body){document.getElementById('modalTitle').textContent=title;document.getElementById('modalBody').innerHTML=body;document.getElementById('modal').classList.add('show')}
 function closeModal(){document.getElementById('modal').classList.remove('show')}
 function openProduct(pId){let p=db.products.find(x=>x.id===pId)||{};showModal(pId?'تعديل منتج':'إضافة منتج','<form onsubmit="saveProduct(event,\''+(pId||'')+'\')"><div class="fields"><div class="wide"><label>اسم المنتج *</label><input name="name" required value="'+esc(p.name||'')+'"></div><div><label>الباركود / المرجع</label><input name="code" value="'+esc(p.code||'')+'"></div><div><label>الكمية المتوفرة</label><input name="qty" type="number" min="0" value="'+(p.qty||0)+'"></div><div><label>ثمن الشراء (DH)</label><input name="cost" type="number" min="0" step=".01" value="'+(p.cost||0)+'"></div><div><label>ثمن البيع (DH)</label><input name="price" type="number" min="0" step=".01" required value="'+(p.price||0)+'"></div><div><label>حد التنبيه</label><input name="threshold" type="number" min="0" value="'+(p.threshold??5)+'"></div><div><label>تاريخ انتهاء الصلاحية</label><input name="expiryDate" type="date" value="'+esc(p.expiryDate||'')+'"></div><div class="wide"><label>صورة المنتج</label><input name="image" type="file" accept="image/*"></div></div><div class="actions" style="margin-top:16px"><button>حفظ المنتج</button><button type="button" class="ghost" onclick="closeModal()">إلغاء</button></div></form>')}
