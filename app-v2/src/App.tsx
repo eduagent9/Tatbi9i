@@ -732,7 +732,7 @@ export default function App() {
       const input={id:editingProductId??crypto.randomUUID(),name:form.name,category:form.category,subcategory:form.subcategory,
         baseUnit:form.unit,piecesPerCarton:form.unit==='carton'?Number(form.pieces):null,
         purchaseCostMinor:madToMinorUnits(Number(form.cost)),salePriceMinor:madToMinorUnits(Number(form.price)),
-        lowStockThreshold:Number(form.threshold),barcode:form.barcode,imageDataUri:productImages[primaryProductImage]??productImageData||null};
+        lowStockThreshold:Number(form.threshold),barcode:form.barcode,imageDataUri:(productImages[primaryProductImage]??productImageData)||null};
       if(editingProductId)await repository.update(input);else await repository.create(input);
       const db=await openAppDatabase();
       await new ProductImagesRepository(db).replace(input.id,productImages,primaryProductImage);
