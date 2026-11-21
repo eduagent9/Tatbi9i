@@ -152,7 +152,7 @@ export function StockAndReturnsPanel(){
    setMessage('تسجل المرتجع '+result.returnNumber+' بقيمة '+(result.returnedValueMinor/100).toFixed(2)+' DH. المبلغ المسترجع نقداً: '+(result.refundMinor/100).toFixed(2)+' DH.');
   }catch(e){setError(e instanceof Error?e.message:'تعذر تسجيل المرتجع.');}finally{setBusy(false);}
  }
- return <section className="panel operations-panel">
+ return <section data-section="inventory" className="panel operations-panel">
   <div className="panel-heading"><div><h3>الجرد والمرتجعات</h3><p>تسوية المخزون وإرجاع السلع من فواتير البيع</p></div><span className="step-mark">12</span></div>
   {error&&<p className="hint" role="alert">{error}</p>}{message&&<p className="hint" role="status">{message}</p>}
   <div className="section-divider"></div>
