@@ -73,4 +73,29 @@ describe('DistributionRepository',()=>{
   expect(db.commitTransaction).toHaveBeenCalledOnce();
  });
 
+ it('records a supplier return and deducts the matching depot batch atomically',async()=>{
+  const db=makeDb(sql=>{
+   if(sql.includes('SELECT id FROM suppliers'))return [{id:'s1'}];
+   if(sql.includes('FROM stock_balances sb JOIN products'))return [{id:'bal1',batch_id:'lot1',quantity:8,product_name:'ماء'}];
+   return [];
+  });
+  const repo=new DistributionRepository(db,()=> '2026-11-21T12:00:00Z',()=> 'generated');
+  const result=await repo.createSupplierReturn({id:'sr1',supplierId:'s1',reason:'سلعة تالفة',processedBy:'owner',lines:[{productId:'p1',batchId:'lot1',quantity:3,unitCostMinor:250}]});
+  expect(result).toEqual({totalMinor:750,lineCount:1});
+  expect(db.run).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO supplier_return_lines'),expect.arrayContaining(['sr1','p1','lot1',3,250,750,'ماء']));
+  expect(db.run).toHaveBeenCalledWith(expect.stringContaining('UPDATE stock_balances'),[5,'2026-11-21T12:00:00Z','bal1']);
+  expect(db.commitTransaction).toHaveBeenCalledOnce();
+ });
+ it('rolls back supplier return if depot stock is insufficient',async()=>{
+  const db=makeDb(sql=>{
+   if(sql.includes('SELECT id FROM suppliers'))return [{id:'s1'}];
+   if(sql.includes('FROM stock_balances sb JOIN products'))return [{id:'bal1',batch_id:'lot1',quantity:2,product_name:'ماء'}];
+   return [];
+  });
+  const repo=new DistributionRepository(db);
+  await expect(repo.createSupplierReturn({id:'sr1',supplierId:'s1',reason:'إرجاع',processedBy:'owner',lines:[{productId:'p1',batchId:'lot1',quantity:3,unitCostMinor:250}]})).rejects.toThrow('المخزون المتوفر');
+  expect(db.rollbackTransaction).toHaveBeenCalledOnce();
+  expect(db.commitTransaction).not.toHaveBeenCalled();
+ });
+
 });
