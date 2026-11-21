@@ -24,7 +24,7 @@ export function availableUnreservedQuantity(onHand:number,reserved:number):numbe
 export function personalOrderTransitionAllowed(current:PersonalOrderStatus,next:PersonalOrderStatus):boolean {
   const transitions:Record<PersonalOrderStatus,readonly PersonalOrderStatus[]> = {
     submitted:['preparing','cancelled'], preparing:['ready','cancelled'],
-    ready:['partially_delivered','delivered'], partially_delivered:['delivered'],
+    ready:['partially_delivered','delivered'], partially_delivered:['delivered','cancelled'],
     delivered:[],cancelled:[],
   };
   return transitions[current].includes(next);
@@ -118,7 +118,7 @@ export class PersonalOrdersRepository {
       });
       if(new Set(input.lines.map(x=>x.orderLineId)).size!==input.lines.length)throw new Error('ما تكررش نفس السطر فالتسليم.');
       const gross=selected.reduce((sum,item)=>sum+Math.round(item.quantity*Number(item.line.unit_price_minor)),0);
-      const invoiced=await this.db.query('SELECT COALESCE(SUM(total_minor+offer_discount_minor),0) AS gross,COALESCE(SUM(offer_discount_minor),0) AS discount FROM invoices WHERE order_id=? AND status<>'voided'',[orderId]);
+      const invoiced=await this.db.query(`SELECT COALESCE(SUM(total_minor+offer_discount_minor),0) AS gross,COALESCE(SUM(offer_discount_minor),0) AS discount FROM invoices WHERE order_id=? AND status<>'voided'`,[orderId]);
       const remainingGross=Math.max(0,Number(order.subtotal_minor)-Number(invoiced.values?.[0]?.gross??0));
       const remainingDiscount=Math.max(0,Number(order.offer_discount_minor)-Number(invoiced.values?.[0]?.discount??0));
       const isFinal=selected.every(({line,quantity})=>quantity>=Number(line.remaining_quantity)-1e-9)&&orderLines.every(line=>selected.some(item=>item.line.id===line.id)||Number(line.remaining_quantity)<=1e-9);
