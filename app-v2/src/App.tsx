@@ -818,7 +818,7 @@ export default function App() {
         </section>
       </div>}
       {currentUser?.role==='owner'&&repository&&<nav className="main-section-nav" aria-label="الأقسام الرئيسية">{([{id:'home',label:'الرئيسية'},{id:'sales',label:'المبيعات'},{id:'inventory',label:'المخزون'},{id:'purchases',label:'المشتريات'},{id:'relations',label:'العلاقات'},{id:'management',label:'الإدارة'}] as const).map(item=><button type="button" key={item.id} className={activeSection===item.id?'active':''} aria-current={activeSection===item.id?'page':undefined} onClick={()=>setActiveSection(item.id)}>{item.label}</button>)}</nav>}
-      {currentUser?.role==='owner'&&repository && <div className="content-grid">
+      {currentUser?.role==='owner'&&repository && <div className="content-grid section-view" data-active-section={activeSection}>
         <section id="home-section" data-section="home" className="panel team-panel">
           <div className="panel-heading"><div><h3>طلبات المحلات</h3><p>مندوب الطلبات يسجل طلب الزبون، والديبو يتابع التحضير والتجهيز</p></div><span className="step-mark">01</span></div>
           <form onSubmit={submitDistributionOrder}>
@@ -833,7 +833,7 @@ export default function App() {
           {distributionOrders.length===0?<p className="hint">مازال ما تسجل حتى طلب.</p>:distributionOrders.map(order=><article className="team-row" key={order.id}><div><strong>{order.order_number} · {order.customer_name}</strong><span>{order.created_by_name} · {order.vehicle_label||'بلا سيارة محددة'} · {formatMad(order.total_minor)}</span><span>الحالة: {({draft:'مسودة',submitted:'مرسل للديبو',accepted:'مقبول',preparing:'قيد التحضير',ready:'جاهز للتحميل',partially_delivered:'تسليم جزئي',delivered:'تم التسليم',cancelled:'ملغى'} as Record<string,string>)[order.status]}</span></div><div className="order-actions">{order.status==='submitted'&&<button type="button" className="secondary-button" disabled={saving} onClick={()=>changeOrderStatus(order,'accepted')}>قبول الطلب</button>}{order.status==='accepted'&&<button type="button" className="secondary-button" disabled={saving} onClick={()=>changeOrderStatus(order,'preparing')}>بدء التحضير</button>}{order.status==='preparing'&&<button type="button" className="primary-button" disabled={saving} onClick={()=>changeOrderStatus(order,'ready')}>تأكيد الجاهزية</button>}{(order.status==='ready'||order.status==='partially_delivered')&&<><div className="order-delivery-lines">{(orderDeliveryLines[order.id]??[]).filter(line=>line.remaining_quantity>0).map(line=><label key={line.id}>{line.product_name_snapshot} · باقي {line.remaining_quantity}<input type="number" min="0" max={line.remaining_quantity} step="0.01" value={deliveryQuantities[order.id+':'+line.id]??String(line.remaining_quantity)} onChange={e=>setDeliveryQuantities(current=>({...current,[order.id+':'+line.id]:e.target.value}))}/></label>)}</div><label>المبلغ النقدي المستخلص (DH)<input type="number" min="0" step="0.01" value={deliveryCollectedAmounts[order.id]??'0'} onChange={e=>setDeliveryCollectedAmounts(current=>({...current,[order.id]:e.target.value}))} /></label>{order.status==='ready'&&<button type="button" className="secondary-button" disabled={saving||!order.assigned_vehicle_id} onClick={()=>loadOrderToVehicle(order)}>تحميل السيارة</button>}<button type="button" className="primary-button" disabled={saving} onClick={()=>deliverOrder(order)}>تأكيد الكميات المسلّمة وإصدار الفاتورة</button></>}</div></article>)}
           <p className="hint">كل تسليم كينشئ فاتورة بالكميات اللي تسلمات فعلاً، وكيخصمها من مخزون السيارة. الكميات اللي ما تسلماتش كتبقى فالطلب ويمكن تكملها فزيارة أخرى.</p>
         </section>
-        <section className="panel team-panel">
+        <section data-section="management" className="panel team-panel">
           <div className="panel-heading"><div><h3>الفريق وتعيين السيارات</h3><p>تسجيل أعضاء الفريق وربط سيارات البيع والتوصيل بالمسؤول عنها</p></div><span className="step-mark">الفريق</span></div>
           <form onSubmit={submitTeamMember}>
             <label>اسم المستخدم<input required value={teamName} onChange={e=>setTeamName(e.target.value)} placeholder="اسم المندوب أو السائق" /></label>
@@ -878,7 +878,7 @@ export default function App() {
         </section>
         <StockAndReturnsPanel />
         <DataBackupPanel />
-        <section className="panel stock-panel"><div className="panel-heading"><div><h3>حركة المخزون</h3><p>إدخال أو إخراج الكمية من المستودع الرئيسي</p></div><span className="step-mark">03</span></div>
+        <section data-section="inventory" className="panel stock-panel"><div className="panel-heading"><div><h3>حركة المخزون</h3><p>إدخال أو إخراج الكمية من المستودع الرئيسي</p></div><span className="step-mark">03</span></div>
           <form onSubmit={submitStock}>
             <label>المنتج<select required value={stockProductId} onChange={e => setStockProductId(e.target.value)}><option value="">اختار المنتج</option>{products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
             <div className="two-cols"><label>نوع الحركة<select value={stockDirection} onChange={e => setStockDirection(e.target.value as 'in'|'out')}><option value="in">إدخال للمستودع</option><option value="out">إخراج من المستودع</option></select></label><label>الكمية<input type="number" min="0.01" step="0.01" required value={stockQuantity} onChange={e => setStockQuantity(e.target.value)} /></label></div>
@@ -955,7 +955,7 @@ export default function App() {
           </form>
           <p className="hint">التوريد كيزيد المخزون ويحدث متوسط تكلفة الشراء. وصل الشراء والدفعات وحركة المخزون كيتسجلو فمعاملة واحدة.</p>
         </section>
-        <section className="panel collection-panel"><div className="panel-heading"><div><h3>تحصيل الديون</h3><p>تسجيل أداء لاحق على فاتورة سابقة</p></div><span className="step-mark">06</span></div>
+        <section data-section="sales" className="panel collection-panel"><div className="panel-heading"><div><h3>تحصيل الديون</h3><p>تسجيل أداء لاحق على فاتورة سابقة</p></div><span className="step-mark">06</span></div>
           <form onSubmit={submitCollection}>
             <label>الفاتورة المستحقة<select required value={collectionInvoiceId} onChange={e => setCollectionInvoiceId(e.target.value)}><option value="">اختار الفاتورة</option>{outstandingInvoices.map(invoice => <option key={invoice.invoiceId} value={invoice.invoiceId}>{invoice.invoiceNumber} · {invoice.customerName} · باقي {formatMad(invoice.dueMinor)}</option>)}</select></label>
             <label>المبلغ المستخلص (DH)<input type="number" min="0.01" step="0.01" required value={collectionAmount} onChange={e => setCollectionAmount(e.target.value)} placeholder="0.00" /></label>
@@ -978,7 +978,7 @@ export default function App() {
           </form>
           <p className="hint">الفاتورة كتجمع عدة منتجات، وكتتسجل تفاصيل الثمن والتكلفة وكتنقص الكميات من المستودع. البيع كيرفض إلا ما كانش المخزون كافي.</p>
         </section>
-        <section className="panel team-panel">
+        <section data-section="management" className="panel team-panel">
           <div className="panel-heading"><div><h3>تسليم نقدية المبيعات للديبو</h3><p>تتبع المبالغ اللي جمعها السائق وإصدار وصل عند تسليمها للمالك أو مسؤول الديبو</p></div><span className="step-mark">النقدية</span></div>
           <form onSubmit={submitCashHandover}>
             <label>السائق / جلسة التحصيل<select required value={handoverSessionId} onChange={e=>setHandoverSessionId(e.target.value)}><option value="">اختار جلسة مفتوحة</option>{cashSessions.filter(session=>session.status==='open').map(session=><option key={session.id} value={session.id}>{session.user_name} · {session.vehicle_label||'بدون سيارة'} · باقي {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</option>)}</select></label>
