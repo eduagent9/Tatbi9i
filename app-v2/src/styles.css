@@ -75,6 +75,7 @@ body.barcode-scanner-active .barcode-scanner-overlay{visibility:visible!importan
 .section-view[data-active-section="home"] > section[data-section="home"],
 .section-view[data-active-section="sales"] > section[data-section="sales"],
 .section-view[data-active-section="inventory"] > section[data-section="inventory"],
+.section-view[data-active-section="distribution"] > section[data-section="distribution"],
 .section-view[data-active-section="purchases"] > section[data-section="purchases"],
 .section-view[data-active-section="relations"] > section[data-section="relations"],
 .section-view[data-active-section="management"] > section[data-section="management"]{display:block}
@@ -82,7 +83,7 @@ body.barcode-scanner-active .barcode-scanner-overlay{visibility:visible!importan
 @media(max-width:760px){.main-section-nav button{padding:10px 13px;font-size:12px}}
 
 
-/* Keep the six main sections reachable at the bottom on Android. */
+/* Keep the main sections reachable at the bottom on Android. */
 .main-section-nav{
   position:fixed;
   top:auto;
