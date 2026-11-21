@@ -4,12 +4,13 @@ import { APP_MIGRATIONS } from './sqlite-database';
 describe('append-only distribution migration', () => {
   it('registers migration 010 after the existing nine migrations', () => {
     expect(APP_MIGRATIONS.map(migration => migration.version)).toEqual(
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
     );
     expect(APP_MIGRATIONS[9].name).toBe('distribution_operations');
     expect(APP_MIGRATIONS[10].name).toBe('variant_vehicle_counts');
     expect(APP_MIGRATIONS[11].name).toBe('personal_orders_and_product_images');
     expect(APP_MIGRATIONS[12].name).toBe('daily_cash_closing');
+    expect(APP_MIGRATIONS[13].name).toBe('product_gallery');
   });
 
   it('adds product image storage and append-only order reservations', () => {
@@ -17,6 +18,15 @@ describe('append-only distribution migration', () => {
     expect(sql).toContain('ALTER TABLE products ADD COLUMN image_data_uri TEXT');
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS sales_order_reservations');
     expect(sql).toContain('fulfilled_quantity');
+  });
+
+  it('migrates legacy product photos into a five-image-ready gallery without deleting the original column', () => {
+    const sql = APP_MIGRATIONS[13].sql;
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS product_images');
+    expect(sql).toContain('REFERENCES products(id) ON DELETE CASCADE');
+    expect(sql).toContain('idx_product_images_one_primary');
+    expect(sql).toContain('INSERT INTO product_images');
+    expect(sql).toContain('image_data_uri');
   });
 
   it('contains the data structures required for route execution and settlement', () => {
