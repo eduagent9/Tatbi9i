@@ -900,6 +900,7 @@ export default function App() {
             <div className="two-cols"><label>ثمن الشراء (DH)<input type="number" min="0" step="0.01" required value={form.cost} onChange={e => setForm({...form,cost:e.target.value})} placeholder="0.00" /></label><label>ثمن البيع (DH)<input type="number" min="0" step="0.01" required value={form.price} onChange={e => setForm({...form,price:e.target.value})} placeholder="0.00" /></label></div>
             <div className="two-cols"><label>حد التنبيه للمخزون<input type="number" min="0" step="0.01" value={form.threshold} onChange={e => setForm({...form,threshold:e.target.value})} /></label><label>الباركود<input value={form.barcode} onChange={e => setForm({...form,barcode:e.target.value})} placeholder="اختياري" /></label></div><button type="button" className="secondary-button barcode-scan-trigger" disabled={saving||barcodeScanning} onClick={()=>scanProductBarcode('product')}>مسح الباركود بالكاميرا</button>
             <button className="primary-button" disabled={saving}>{saving ? 'كيتم الحفظ...' : editingProductId?'حفظ التعديلات':'حفظ المنتج'}</button>
+            {editingProductId&&<button type="button" className="secondary-button" disabled={saving} onClick={()=>{setEditingProductId(null);setForm(emptyForm);}}>إلغاء التعديل</button>}
           </form>
         </section>
         <section data-section="inventory" className="panel list-panel"><div className="panel-heading"><div><h3>لائحة المنتجات</h3><p>المخزون الحالي مجموع المستودع والسيارات</p></div><span className="step-mark">02</span></div>
