@@ -73,6 +73,7 @@ body.barcode-scanner-active .barcode-scanner-overlay{visibility:visible!importan
 .main-section-nav button.active{background:#176b68;color:#fff;border-color:#176b68}
 .section-view[data-active-section] > section{display:none}
 .section-view[data-active-section="home"] > section[data-section="home"],
+.section-view[data-active-section="catalog"] > section[data-section="catalog"],
 .section-view[data-active-section="sales"] > section[data-section="sales"],
 .section-view[data-active-section="inventory"] > section[data-section="inventory"],
 .section-view[data-active-section="distribution"] > section[data-section="distribution"],
@@ -146,7 +147,7 @@ footer{position:static;margin-top:22px}
 .credit-limit-row strong{padding-bottom:10px}
 @media(max-width:640px){.distribution-subpanel{padding:14px}.credit-limit-row{grid-template-columns:1fr 1fr}.credit-limit-row strong{grid-column:1/-1}.route-stop{grid-template-columns:1fr}.route-stop>*{grid-column:1/-1}}
 
-.section-view[data-active-section="orders"] > section[data-section="orders"]{display:block}
+.section-view[data-active-section="orders"] > section[data-section="orders"],.section-view[data-active-section="catalog"] > section[data-section="catalog"]{display:block}
 .personal-mode .team-panel{display:none!important}
 .personal-orders-panel{grid-column:1/-1}
 .personal-product-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}
