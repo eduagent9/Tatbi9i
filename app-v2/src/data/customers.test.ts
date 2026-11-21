@@ -31,4 +31,11 @@ describe('CustomerRepository',()=>{
     expect(rows[0]).toMatchObject({id:'c1',invoice_count:2,debt_minor:4500});
     expect(db.query).toHaveBeenCalledWith(expect.stringContaining('SUM(CASE'),['%برشيد%','%برشيد%','%برشيد%']);
   });
+  it('updates customer contact details transactionally without changing invoice history',async()=>{
+    const db=fakeDb(),repo=new CustomerRepository(db,()=> '2026-11-21T12:00:00Z');
+    await repo.update({id:'c1',name:'متجر جديد',phone:'0611111111',city:'سطات'});
+    expect(db.run).toHaveBeenCalledWith(expect.stringContaining('UPDATE customers SET name=?'),expect.arrayContaining(['متجر جديد','0611111111','سطات']));
+    expect(db.commitTransaction).toHaveBeenCalledOnce();
+  });
+
 });
