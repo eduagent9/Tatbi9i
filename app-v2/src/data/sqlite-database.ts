@@ -15,6 +15,7 @@ import userPinAuthSchema from './migrations/009_user_pin_auth.sql?raw';
 import distributionOperationsSchema from './migrations/010_distribution_operations.sql?raw';
 import variantVehicleCountsSchema from './migrations/011_variant_vehicle_counts.sql?raw';
 import personalOrdersSchema from './migrations/012_personal_orders_and_product_images.sql?raw';
+import dailyCashSchema from './migrations/013_daily_cash_closing.sql?raw';
 
 export interface SqliteExecutor {
   execute(statement: string): Promise<unknown>;
@@ -76,6 +77,7 @@ export const APP_MIGRATIONS: Migration[] = [
   { version: 10, name: 'distribution_operations', sql: distributionOperationsSchema },
   { version: 11, name: 'variant_vehicle_counts', sql: variantVehicleCountsSchema },
   { version: 12, name: 'personal_orders_and_product_images', sql: personalOrdersSchema },
+  { version: 13, name: 'daily_cash_closing', sql: dailyCashSchema },
 ];
 
 export async function applyMigrations(
