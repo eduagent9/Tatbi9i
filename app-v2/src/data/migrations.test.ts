@@ -4,10 +4,18 @@ import { APP_MIGRATIONS } from './sqlite-database';
 describe('append-only distribution migration', () => {
   it('registers migration 010 after the existing nine migrations', () => {
     expect(APP_MIGRATIONS.map(migration => migration.version)).toEqual(
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
     );
     expect(APP_MIGRATIONS[9].name).toBe('distribution_operations');
     expect(APP_MIGRATIONS[10].name).toBe('variant_vehicle_counts');
+    expect(APP_MIGRATIONS[11].name).toBe('personal_orders_and_product_images');
+  });
+
+  it('adds product image storage and append-only order reservations', () => {
+    const sql = APP_MIGRATIONS[11].sql;
+    expect(sql).toContain('ALTER TABLE products ADD COLUMN image_data_uri TEXT');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS sales_order_reservations');
+    expect(sql).toContain('fulfilled_quantity');
   });
 
   it('contains the data structures required for route execution and settlement', () => {
