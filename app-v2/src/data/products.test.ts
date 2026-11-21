@@ -60,7 +60,7 @@ describe('ProductRepository', () => {
     const db=fakeDb(),repo=new ProductRepository(db);
     await repo.archive('p1','owner');
     expect(db.run).toHaveBeenCalledWith(expect.stringContaining('UPDATE products SET is_active=0'),expect.any(Array));
-    expect(db.run).toHaveBeenCalledWith(expect.stringContaining('product.archived'),expect.any(Array));
+    expect(db.run).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO audit_events'),expect.arrayContaining(['product.archived']));
     expect(db.commitTransaction).toHaveBeenCalledOnce();
   });
 
