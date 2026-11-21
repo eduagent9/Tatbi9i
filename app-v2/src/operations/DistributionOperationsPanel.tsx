@@ -1,6 +1,6 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import {formatMad,madToMinorUnits} from '../data/money';
-import {canPerform,type AppRole} from '../data/permissions';
+import {type AppRole} from '../data/permissions';
 import {openAppDatabase} from '../data/sqlite-database';
 import {DistributionRepository,type CustomerAgingRow,type SupplierAccountRow} from '../data/distribution';
 
