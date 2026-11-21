@@ -45,7 +45,7 @@ export function DistributionOperationsPanel({user,users,vehicles,customers}:Prop
  const load=useCallback(async()=>{
   const db=await openAppDatabase(),repo=new DistributionRepository(db);
   const [r,s,a,g,c]=await Promise.all([
-   db.query(`SELECT r.id,r.route_code,r.name,r.planned_date,v.label AS vehicle_label,u.display_name AS driver_name,r.status,
+   db.query(`SELECT r.id,r.route_code,r.name,r.planned_date,v.label AS vehicle_label,r.driver_user_id,u.display_name AS driver_name,r.status,
     (SELECT COUNT(*) FROM delivery_route_stops x WHERE x.route_id=r.id) AS stop_count
     FROM delivery_routes r JOIN vehicles v ON v.id=r.vehicle_id JOIN users u ON u.id=r.driver_user_id
     WHERE r.status IN ('planned','started') OR r.planned_date>=date('now','-7 day')
@@ -159,7 +159,7 @@ export function DistributionOperationsPanel({user,users,vehicles,customers}:Prop
   {(user.role==='owner'||user.role==='depot_manager')&&<div className="distribution-subpanel"><h4>تقادم ديون الزبناء</h4>
    {aging.filter(a=>a.total_due_minor>0).map(a=><article className="customer-row" key={a.customer_id}><div><strong>{a.customer_name}</strong><span>حالي {formatMad(a.current_minor)} · 1–30 يوم {formatMad(a.days_1_30_minor)} · 31–60 يوم {formatMad(a.days_31_60_minor)} · 61–90 يوم {formatMad(a.days_61_90_minor)} · أكثر من 90 يوم {formatMad(a.over_90_minor)}</span></div><strong>{formatMad(a.total_due_minor)}</strong></article>)}
    {aging.every(a=>a.total_due_minor===0)&&<p className="hint">ما كايناش ديون مستحقة.</p>}
-  </div>
+  </div>}
   {user.role==='delivery_driver'&&assignedVehicle&&<div className="distribution-subpanel"><h4>بداية ونهاية يوم السيارة</h4>
    {!vehicleSession?<form onSubmit={e=>{e.preventDefault();void action(startVehicleDay,'تفتحات جلسة يوم السيارة.');}}><label>عداد الكيلومترات عند البداية<input type="number" min="0" step="0.1" value={odometer} onChange={e=>setOdometer(e.target.value)}/></label><label>الصندوق الافتتاحي (DH)<input type="number" min="0" step="0.01" value={openingCash} onChange={e=>setOpeningCash(e.target.value)}/></label><button className="primary-button" disabled={busy}>فتح يوم السيارة</button></form>
    :<form onSubmit={e=>{e.preventDefault();void action(closeVehicleDay,'تسدات جلسة السيارة وتسجل الجرد والمطابقة.');}}><p className="hint">تاريخ الجلسة: {vehicleSession.business_date} · مخزون السيارة الحالي: {counts.length} سطر</p>{counts.map(row=><label key={row.product_id+'|'+row.variant_id+'|'+row.batch_id}>{row.product_name}{row.variant_name?' · '+row.variant_name:''}{row.batch_code?' · '+row.batch_code:''} (المتوقع {row.quantity})<input type="number" min="0" step="0.01" value={countValues[row.product_id+'|'+(row.variant_id??'')+'|'+(row.batch_id??'')]??String(row.quantity)} onChange={e=>setCountValues(x=>({...x,[row.product_id+'|'+(row.variant_id??'')+'|'+(row.batch_id??'')]:e.target.value}))}/></label>)}<label>النقد المعدود عند الإغلاق (DH)<input required type="number" min="0" step="0.01" value={closingCash} onChange={e=>setClosingCash(e.target.value)}/></label><label>عداد الكيلومترات عند الإغلاق<input type="number" min="0" step="0.1" value={closingOdometer} onChange={e=>setClosingOdometer(e.target.value)}/></label><button className="primary-button" disabled={busy}>إغلاق اليوم ومطابقة السيارة</button></form>}
