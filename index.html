@@ -98,12 +98,12 @@ const pageGroups=[
 function groupForPage(page){return pageGroups.find(g=>g.pages.includes(page))||pageGroups[0]}
 function buildNav(){
  const groupNav=document.getElementById('groupnav');
- groupNav.innerHTML=pageGroups.map(g=>'<button class="groupbtn" data-group="'+g.id+'" onclick="goGroup(\\''+g.id+'\\')"><span>'+g.icon+'</span>'+g.label+'</button>').join('');
+ groupNav.innerHTML=pageGroups.map(g=>'<button class="groupbtn" data-group="'+g.id+'" onclick="goGroup(\''+g.id+'\')"><span>'+g.icon+'</span>'+g.label+'</button>').join('');
  renderSubnav('dashboard');
 }
 function renderSubnav(page){
  const group=groupForPage(page),nav=document.getElementById('sidenav');
- nav.innerHTML=group.pages.map(id=>{const p=pages.find(x=>x[0]===id);return '<button data-page="'+p[0]+'" onclick="go(\\''+p[0]+'\\')"><span>'+p[2]+'</span>'+p[1]+'</button>'}).join('');
+ nav.innerHTML=group.pages.map(id=>{const p=pages.find(x=>x[0]===id);return '<button data-page="'+p[0]+'" onclick="go(\''+p[0]+'\')"><span>'+p[2]+'</span>'+p[1]+'</button>'}).join('');
  document.querySelectorAll('[data-group]').forEach(x=>x.classList.toggle('active',x.dataset.group===group.id));
  document.querySelectorAll('[data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===page));
 }
