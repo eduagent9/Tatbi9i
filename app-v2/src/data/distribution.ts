@@ -179,7 +179,7 @@ export class DistributionRepository {
   }
 
   async startVehicleDay(input:VehicleDayInput):Promise<void>{
-    const openingCash= input.openingCashMinor??0,expectedCash=input.expectedCashMinor??0;if(!Number.isSafeInteger(openingCash)||openingCash<0||!Number.isSafeInteger(expectedCash)||expectedCash<0)throw new RangeError('رصيد الصندوق غير صالح.');
+    const openingCash= input.openingCashMinor??0,expectedCash=(input.expectedCashMinor??0)+openingCash;if(!Number.isSafeInteger(openingCash)||openingCash<0||!Number.isSafeInteger(expectedCash)||expectedCash<0)throw new RangeError('رصيد الصندوق غير صالح.');
     if(input.openingOdometer!=null&&(!Number.isFinite(input.openingOdometer)||input.openingOdometer<0))throw new RangeError('عداد الكيلومترات غير صالح.');
     const now=this.now();await this.db.beginTransaction();
     try{
