@@ -175,3 +175,15 @@ footer{position:static;margin-top:22px}
 .product-image-preview img{width:96px;height:96px;object-fit:cover;border-radius:12px;border:1px solid #dce7e9}
 @media(min-width:760px){.personal-product-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:360px){.personal-product-grid{gap:8px}.personal-product-info{padding:8px}}
+
+.supplier-accounts-panel{margin-top:18px}
+.supplier-account-list{display:grid;gap:8px;margin:12px 0}
+.supplier-account-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px;border:1px solid #e5ecee;border-radius:12px;background:#fff}
+.supplier-account-row>strong{grid-column:1/-1;color:#294b5a}
+.supplier-account-row>div{display:grid;gap:3px}
+.supplier-account-row span{font-size:10px;color:#81939b}
+.supplier-account-row b{font-size:12px;color:#315f66}
+.supplier-account-balance{grid-column:1/-1;border-top:1px solid #edf1f3;padding-top:8px}
+.supplier-payment-form{display:grid;gap:10px;margin-top:14px}
+.sale-product-grid{margin-top:4px}
+@media(min-width:760px){.supplier-account-row{grid-template-columns:1.5fr repeat(4,1fr)}.supplier-account-row>strong{grid-column:auto}.supplier-account-balance{grid-column:auto;border-top:0;padding-top:0}}
