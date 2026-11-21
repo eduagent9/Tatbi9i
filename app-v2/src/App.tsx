@@ -77,6 +77,7 @@ export default function App() {
   const [saleLines, setSaleLines] = useState<Array<{productId:string;quantity:string}>>([{productId:'',quantity:'1'}]);
   const [saleDiscount, setSaleDiscount] = useState('0');
   const [saleCollected, setSaleCollected] = useState('');
+  const [lastInvoice, setLastInvoice] = useState<null | {number:string;date:string;customer:string;phone:string|null;city:string|null;seller:string;lines:Array<{name:string;quantity:number;unitPrice:number;total:number}>;subtotal:number;discount:number;total:number;collected:number;due:number}>(null);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -651,6 +652,14 @@ export default function App() {
       setMovementHistory(await new StockRepository(db).getRecentMovements());
       setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
       setSaleLines([{productId:'',quantity:'1'}]); setSaleDiscount('0'); setSaleCollected('');
+      const customer = customers.find(item=>item.id===saleCustomerId);
+      setLastInvoice({
+        number:result.invoiceNumber,date:new Date().toLocaleString('fr-MA'),
+        customer:customer?.name??'زبون',phone:customer?.phone??null,city:customer?.city??null,
+        seller:currentUser?.display_name??'المالك',
+        lines:saleLines.map(line=>{const product=products.find(item=>item.id===line.productId);const quantity=Number(line.quantity);const unitPrice=Number(product?.sale_price_minor??0);return {name:product?.name??'منتج',quantity,unitPrice,total:Math.round(quantity*unitPrice)};}),
+        subtotal:result.subtotalMinor,discount:result.discountMinor,total:result.totalMinor,collected:result.collectedMinor,due:result.dueMinor,
+      });
       setNotice('تسجلات الفاتورة ' + result.invoiceNumber + ' بنجاح. المتبقي على الزبون: ' + formatMad(result.dueMinor));
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر تسجيل الفاتورة.'); }
     finally { setSaving(false); }
@@ -680,6 +689,15 @@ export default function App() {
       {loading && <div className="message">كنوجد قاعدة البيانات...</div>}
       {!loading && error && <div className="message error" role="alert">{error}<small>المعاينة فالمتصفح ما كتخزنش البيانات؛ افتح تطبيق Android المبني باش تجرب SQLite.</small></div>}
       {notice && <div className="message success" role="status">{notice}</div>}
+      {lastInvoice&&<section className="panel last-invoice-actions"><div><strong>آخر فاتورة: {lastInvoice.number}</strong><p className="hint">الفاتورة محفوظة فقاعدة البيانات، وتقدر تطبعها أو تحفظها PDF.</p></div><button type="button" className="primary-button" onClick={()=>window.print()}>طباعة الفاتورة / PDF</button></section>}
+      {lastInvoice&&<section id="invoice-print-root" aria-label="فاتورة البيع">
+        <header className="invoice-print-header"><div><h1>تطبيقي</h1><p>فاتورة بيع</p></div><div><strong>رقم الفاتورة</strong><span>{lastInvoice.number}</span><strong>التاريخ</strong><span>{lastInvoice.date}</span></div></header>
+        <div className="invoice-print-customer"><strong>الزبون:</strong> {lastInvoice.customer}{lastInvoice.phone&&<> · {lastInvoice.phone}</>}{lastInvoice.city&&<> · {lastInvoice.city}</>}<br/><strong>البائع:</strong> {lastInvoice.seller}</div>
+        <table className="invoice-print-table"><thead><tr><th>المنتج</th><th>الكمية</th><th>ثمن الوحدة</th><th>المجموع</th></tr></thead><tbody>{lastInvoice.lines.map((line,index)=><tr key={index}><td>{line.name}</td><td>{line.quantity}</td><td>{formatMad(line.unitPrice)}</td><td>{formatMad(line.total)}</td></tr>)}</tbody></table>
+        <div className="invoice-print-totals"><p>المجموع قبل التخفيض: <strong>{formatMad(lastInvoice.subtotal)}</strong></p><p>التخفيض: <strong>{formatMad(lastInvoice.discount)}</strong></p><p>الصافي: <strong>{formatMad(lastInvoice.total)}</strong></p><p>المؤدى: <strong>{formatMad(lastInvoice.collected)}</strong></p><p>الباقي: <strong>{formatMad(lastInvoice.due)}</strong></p></div>
+        <p className="invoice-print-footer">شكراً على ثقتكم</p>
+      </section>}
+
       {!loading&&!currentUser&&authMode==='setup'&&<section className="panel auth-panel"><div className="panel-heading"><div><h3>إعداد دخول المالك</h3><p>أول مرة خاصك تختار رمز PIN خاص بالمالك. غادي يتخزن كـ hash مملح، ماشي كنص واضح.</p></div></div><form onSubmit={setupOwnerPin}><label>رمز PIN (4 إلى 8 أرقام)<input type="password" inputMode="numeric" autoComplete="new-password" maxLength={8} required value={setupPin} onChange={e=>setSetupPin(e.target.value)} /></label><label>تأكيد رمز PIN<input type="password" inputMode="numeric" autoComplete="new-password" maxLength={8} required value={setupPinConfirm} onChange={e=>setSetupPinConfirm(e.target.value)} /></label><button className="primary-button" disabled={saving}>{saving?'كيتم الإعداد...':'حفظ رمز المالك والدخول'}</button></form></section>}
       {!loading&&!currentUser&&authMode==='login'&&<section className="panel auth-panel"><div className="panel-heading"><div><h3>تسجيل الدخول</h3><p>اختار المستخدم ودخل رمز PIN ديالو.</p></div></div><form onSubmit={loginUser}><label>المستخدم<select required value={authUserId} onChange={e=>setAuthUserId(e.target.value)}>{authUsers.filter(user=>user.is_active===1&&user.pin_hash&&user.pin_salt).map(user=><option key={user.id} value={user.id}>{user.display_name} · {roleLabels[user.role]}</option>)}</select></label><label>رمز PIN<input type="password" inputMode="numeric" autoComplete="current-password" maxLength={8} required value={authPin} onChange={e=>setAuthPin(e.target.value)} /></label><button className="primary-button" disabled={saving}>{saving?'كيتم التحقق...':'دخول'}</button></form></section>}
       {currentUser?.role==='order_rep'&&repository&&<div className="content-grid">
