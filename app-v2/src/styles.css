@@ -187,3 +187,15 @@ footer{position:static;margin-top:22px}
 .supplier-payment-form{display:grid;gap:10px;margin-top:14px}
 .sale-product-grid{margin-top:4px}
 @media(min-width:760px){.supplier-account-row{grid-template-columns:1.5fr repeat(4,1fr)}.supplier-account-row>strong{grid-column:auto}.supplier-account-balance{grid-column:auto;border-top:0;padding-top:0}}
+
+.daily-cash-panel{grid-column:1/-1}
+.daily-cash-summary{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:14px 0}
+.daily-cash-summary>div{display:grid;gap:4px;padding:10px;border:1px solid #e5ecee;border-radius:11px}
+.daily-cash-summary span{font-size:11px;color:#80929a}
+.daily-cash-summary strong{font-size:13px;color:#315f66}
+.daily-cash-summary .daily-cash-expected{grid-column:1/-1;background:#edf5f4;border-color:#d8e8e5}
+.daily-cash-summary .daily-cash-expected strong{font-size:19px}
+.daily-cash-history-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #edf1f3}
+.daily-cash-history-row>div{display:grid;gap:4px}
+.daily-cash-history-row span{font-size:11px;color:#80929a}
+.cash-balanced{color:#28734f}.cash-difference{color:#a34d43}
