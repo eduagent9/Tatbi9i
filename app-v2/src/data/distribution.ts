@@ -88,11 +88,11 @@ export class DistributionRepository {
     if(['failed','skipped'].includes(input.status)&&!input.failureReason?.trim())throw new Error('سجل سبب عدم إتمام الزيارة.');
     await this.db.beginTransaction();
     try{
-      const found=await this.db.query("SELECT s.id,s.route_id,s.status,r.driver_user_id,r.status AS route_status FROM delivery_route_stops s JOIN delivery_routes r ON r.id=s.route_id WHERE s.id=?",[input.stopId]);
+      const found=await this.db.query("SELECT s.id,s.route_id,s.order_id,s.status,r.driver_user_id,r.status AS route_status FROM delivery_route_stops s JOIN delivery_routes r ON r.id=s.route_id WHERE s.id=?",[input.stopId]);
       const stop=found.values?.[0];
       if(!stop||String(stop.driver_user_id)!==input.driverId||String(stop.route_status)!=='started')throw new Error('المحطة ماشي ضمن جولة نشيطة ديالك.');
       if(!['pending','arrived'].includes(String(stop.status)))throw new Error('المحطة تسجلات من قبل؛ ما يمكنش نعاودو نسجلوها.');
-      await this.db.run('INSERT INTO delivery_proofs (id,route_stop_id,order_id,driver_user_id,result,recipient_name,signature_local_uri,photo_local_uri,latitude,longitude,note,captured_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',[input.id,input.stopId,null,input.driverId,input.status,input.recipientName?.trim()||null,input.signatureUri??null,input.photoUri??null,input.latitude??null,input.longitude??null,input.note?.trim()||null,now,now]);
+      await this.db.run('INSERT INTO delivery_proofs (id,route_stop_id,order_id,driver_user_id,result,recipient_name,signature_local_uri,photo_local_uri,latitude,longitude,note,captured_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',[input.id,input.stopId,stop.order_id??null,input.driverId,input.status,input.recipientName?.trim()||null,input.signatureUri??null,input.photoUri??null,input.latitude??null,input.longitude??null,input.note?.trim()||null,now,now]);
       await this.db.run('UPDATE delivery_route_stops SET status=?,completed_at=?,failure_reason=?,notes=? WHERE id=?',[input.status,now,input.failureReason?.trim()||null,input.note?.trim()||null,input.stopId]);
       await this.db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[this.makeId(),input.driverId,'route.stop_recorded','delivery_route_stop',input.stopId,JSON.stringify({status:input.status,proofId:input.id}),now]);
       await this.db.commitTransaction();
@@ -179,14 +179,14 @@ export class DistributionRepository {
   }
 
   async startVehicleDay(input:VehicleDayInput):Promise<void>{
-    const openingCash= input.openingCashMinor??0;if(!Number.isSafeInteger(openingCash)||openingCash<0)throw new RangeError('رصيد افتتاح الصندوق غير صالح.');
+    const openingCash= input.openingCashMinor??0,expectedCash=input.expectedCashMinor??0;if(!Number.isSafeInteger(openingCash)||openingCash<0||!Number.isSafeInteger(expectedCash)||expectedCash<0)throw new RangeError('رصيد الصندوق غير صالح.');
     if(input.openingOdometer!=null&&(!Number.isFinite(input.openingOdometer)||input.openingOdometer<0))throw new RangeError('عداد الكيلومترات غير صالح.');
     const now=this.now();await this.db.beginTransaction();
     try{
       const vehicle=await this.db.query("SELECT id,vehicle_type,assigned_user_id FROM vehicles WHERE id=? AND is_active=1",[input.vehicleId]);
       const v=vehicle.values?.[0];if(!v||String(v.vehicle_type)!=='delivery'||String(v.assigned_user_id)!==input.responsibleUserId)throw new Error('السيارة ماشي سيارة توصيل معيّنة لهذا المستخدم.');
-      await this.db.run("INSERT INTO vehicle_day_sessions (id,vehicle_id,responsible_user_id,business_date,opening_odometer,opening_cash_minor,status,opened_at) VALUES (?,?,?,?,?,?,'open',?)",[input.id,input.vehicleId,input.responsibleUserId,input.businessDate,input.openingOdometer??null,openingCash,now]);
-      await this.db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[this.makeId(),input.responsibleUserId,'vehicle.day_opened','vehicle_day_session',input.id,JSON.stringify({businessDate:input.businessDate,openingCashMinor:openingCash,openingOdometer:input.openingOdometer??null}),now]);
+      await this.db.run("INSERT INTO vehicle_day_sessions (id,vehicle_id,responsible_user_id,business_date,opening_odometer,opening_cash_minor,expected_cash_minor,status,opened_at) VALUES (?,?,?,?,?,?,?,'open',?)",[input.id,input.vehicleId,input.responsibleUserId,input.businessDate,input.openingOdometer??null,openingCash,expectedCash,now]);
+      await this.db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[this.makeId(),input.responsibleUserId,'vehicle.day_opened','vehicle_day_session',input.id,JSON.stringify({businessDate:input.businessDate,openingCashMinor:openingCash,expectedCashMinor:expectedCash,openingOdometer:input.openingOdometer??null}),now]);
       await this.db.commitTransaction();
     }catch(error){await this.db.rollbackTransaction().catch(()=>undefined);throw error;}
   }
@@ -201,23 +201,23 @@ export class DistributionRepository {
       if(input.closingOdometer!=null&&session.opening_odometer!=null&&input.closingOdometer<Number(session.opening_odometer))throw new Error('عداد الإغلاق ما يقدرش يكون أقل من عداد البداية.');
       const location=await this.db.query("SELECT id FROM stock_locations WHERE vehicle_id=? AND location_type='vehicle' AND is_active=1",[session.vehicle_id]);
       const locationId=location.values?.[0]?.id;if(!locationId)throw new Error('موقع مخزون السيارة غير موجود.');
-      const expected=await this.db.query('SELECT product_id,batch_id,quantity FROM stock_balances WHERE location_id=? AND quantity>0',[locationId]);
+      const expected=await this.db.query('SELECT product_id,variant_id,batch_id,quantity FROM stock_balances WHERE location_id=? AND quantity>0',[locationId]);
       const submitted=new Map<string,number>();
       for(const count of input.counts){
-        const key=count.productId+'|'+(count.batchId??'');
+        const key=count.productId+'|'+(count.variantId??'')+'|'+(count.batchId??'');
         if(submitted.has(key))throw new Error('كاين تكرار لنفس المنتج والدفعة فالجرد.');
         submitted.set(key,quantity(count.countedQuantity,'الكمية المعدودة'));
       }
-      const expectedKeys=new Set((expected.values??[]).map(row=>String(row.product_id)+'|'+String(row.batch_id??'')));
-      for(const key of expectedKeys)if(!submitted.has(key))throw new Error('خاصك تدخل العد الفعلي لجميع المنتجات والدفعات اللي عندها رصيد.');
+      const expectedKeys=new Set((expected.values??[]).map(row=>String(row.product_id)+'|'+String(row.variant_id??'')+'|'+String(row.batch_id??'')));
+      for(const key of expectedKeys)if(!submitted.has(key))throw new Error('خاصك تدخل العد الفعلي لجميع المنتجات والدفعات اللي عندها رصيد.');\n      for(const key of submitted.keys())if(!expectedKeys.has(key))throw new Error('كاين منتج أو دفعة فالجرد ما عندهاش رصيد متوقع فالسيارة.');
       let varianceCount=0;
       for(const row of expected.values??[]){
-        const key=String(row.product_id)+'|'+String(row.batch_id??''),counted=submitted.get(key)!;
+        const key=String(row.product_id)+'|'+String(row.variant_id??'')+'|'+String(row.batch_id??''),counted=submitted.get(key)!;
         const expectedQty=Number(row.quantity),variance=counted-expectedQty;
         if(Math.abs(variance)>1e-9)varianceCount++;
-        await this.db.run('INSERT INTO vehicle_stock_counts (id,session_id,product_id,batch_id,expected_quantity,counted_quantity,variance_quantity,counted_at) VALUES (?,?,?,?,?,?,?,?)',[this.makeId(),input.sessionId,row.product_id,row.batch_id??null,expectedQty,counted,variance,now]);
+        await this.db.run('INSERT INTO vehicle_stock_counts_v2 (id,session_id,product_id,variant_id,batch_id,expected_quantity,counted_quantity,variance_quantity,counted_at) VALUES (?,?,?,?,?,?,?,?,?)',[this.makeId(),input.sessionId,row.product_id,row.variant_id??null,row.batch_id??null,expectedQty,counted,variance,now]);
         if(Math.abs(variance)>1e-9){
-          const balance=await this.db.query('SELECT id FROM stock_balances WHERE product_id=? AND variant_id IS NULL AND location_id=? AND batch_id IS ?',[row.product_id,locationId,row.batch_id??null]);
+          const balance=await this.db.query('SELECT id FROM stock_balances WHERE product_id=? AND variant_id IS ? AND location_id=? AND batch_id IS ?',[row.product_id,row.variant_id??null,locationId,row.batch_id??null]);
           if(!balance.values?.[0])throw new Error('رصيد المخزون تبدل أثناء الجرد؛ عاود تحديث الشاشة.');
           await this.db.run('UPDATE stock_balances SET quantity=?,updated_at=? WHERE id=?',[counted,now,balance.values[0].id]);
           await this.db.run("INSERT INTO stock_movements (id,product_id,batch_id,from_location_id,to_location_id,quantity,movement_type,reference_type,reference_id,performed_by,responsible_user_id,occurred_at,note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",[this.makeId(),row.product_id,row.batch_id??null,locationId,locationId,Math.abs(variance),'stock_count','vehicle_day_session',input.sessionId,input.responsibleUserId,input.responsibleUserId,now,'مطابقة مخزون السيارة: '+variance]);
