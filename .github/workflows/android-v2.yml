@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - phase1/technical-foundation
+      - phase2/personal-business-mode
     paths:
       - 'app-v2/**'
       - '.github/workflows/android-v2.yml'
