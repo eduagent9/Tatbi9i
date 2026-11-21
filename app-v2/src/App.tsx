@@ -15,6 +15,7 @@ import { ExpenseRepository } from './data/expenses';
 import { ReportsRepository, type FinancialSummary } from './data/reports';
 import { StockAndReturnsPanel } from './operations/StockAndReturnsPanel';
 import { DataBackupPanel } from './operations/DataBackupPanel';
+import { DistributionOperationsPanel } from './operations/DistributionOperationsPanel';
 import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
 
 const emptyForm = { name: '', category: 'مواد غذائية', subcategory: '', unit: 'piece' as 'piece' | 'carton', pieces: '12', cost: '', price: '', threshold: '0', barcode: '' };
@@ -90,7 +91,7 @@ export default function App() {
   const [stockDirection, setStockDirection] = useState<'in' | 'out'>('in');
   const [stockOutType, setStockOutType] = useState<'delivery' | 'damage' | 'supplier_return'>('delivery');
   const [barcodeScanning,setBarcodeScanning]=useState(false);
-  const [activeSection,setActiveSection]=useState<'home'|'sales'|'inventory'|'purchases'|'relations'|'management'>('home');
+  const [activeSection,setActiveSection]=useState<'home'|'sales'|'inventory'|'distribution'|'purchases'|'relations'|'management'>('home');
 
   const refresh = useCallback(async (repo: ProductRepository) => setProducts(await repo.list()), []);
   useEffect(() => {
@@ -718,7 +719,7 @@ export default function App() {
   return (
     <main className="app-shell" dir="rtl">
       <header className="topbar"><div><span className="brand-mark">ت</span><div><p className="eyebrow">إدارة التوزيع والمبيعات</p><h1>تطبيقي</h1></div></div><div className="topbar-actions">{currentUser&&<><span className="mode-tag">{currentUser.display_name} · {roleLabels[currentUser.role]}</span><button type="button" className="secondary-button" onClick={logoutUser}>خروج</button></>}<span className="mode-tag">نسخة تطوير</span></div></header>
-      <section className="page-heading"><div><p className="eyebrow">تدبير شركة التوزيع</p><h2>{currentUser?.role==='owner'?({home:'الرئيسية',sales:'المبيعات',inventory:'المخزون',purchases:'المشتريات',relations:'العلاقات',management:'الإدارة'} as const)[activeSection]:'مساحة العمل'}</h2><p>{currentUser?.role==='owner'?'كل عمليات الشركة ومؤشراتها في مكان واحد':'مرحبا بك في مساحة العمل الخاصة بدورك'}</p></div><div className="total-card"><strong>{products.length}</strong><span>منتج مسجل</span></div></section>
+      <section className="page-heading"><div><p className="eyebrow">تدبير شركة التوزيع</p><h2>{currentUser?.role==='owner'?({home:'الرئيسية',sales:'المبيعات',inventory:'المخزون',distribution:'التوزيع',purchases:'المشتريات',relations:'العلاقات',management:'الإدارة'} as const)[activeSection]:'مساحة العمل'}</h2><p>{currentUser?.role==='owner'?'كل عمليات الشركة ومؤشراتها في مكان واحد':'مرحبا بك في مساحة العمل الخاصة بدورك'}</p></div><div className="total-card"><strong>{products.length}</strong><span>منتج مسجل</span></div></section>
       {loading && <div className="message">كنوجد قاعدة البيانات...</div>}
       {!loading && error && <div className="message error" role="alert">{error}<small>المعاينة فالمتصفح ما كتخزنش البيانات؛ افتح تطبيق Android المبني باش تجرب SQLite.</small></div>}
       {notice && <div className="message success" role="status">{notice}</div>}
@@ -817,7 +818,7 @@ export default function App() {
           </form>
         </section>
       </div>}
-      {currentUser?.role==='owner'&&repository&&<nav className="main-section-nav" aria-label="الأقسام الرئيسية">{([{id:'home',label:'الرئيسية'},{id:'sales',label:'المبيعات'},{id:'inventory',label:'المخزون'},{id:'purchases',label:'المشتريات'},{id:'relations',label:'العلاقات'},{id:'management',label:'الإدارة'}] as const).map(item=><button type="button" key={item.id} className={activeSection===item.id?'active':''} aria-current={activeSection===item.id?'page':undefined} onClick={()=>setActiveSection(item.id)}>{item.label}</button>)}</nav>}
+      {currentUser?.role==='owner'&&repository&&<nav className="main-section-nav" aria-label="الأقسام الرئيسية">{([{id:'home',label:'الرئيسية'},{id:'sales',label:'المبيعات'},{id:'inventory',label:'المخزون'},{id:'distribution',label:'التوزيع'},{id:'purchases',label:'المشتريات'},{id:'relations',label:'العلاقات'},{id:'management',label:'الإدارة'}] as const).map(item=><button type="button" key={item.id} className={activeSection===item.id?'active':''} aria-current={activeSection===item.id?'page':undefined} onClick={()=>setActiveSection(item.id)}>{item.label}</button>)}</nav>}
       {currentUser?.role==='owner'&&repository && <div className="content-grid section-view" data-active-section={activeSection}>
         <section data-section="home" className="dashboard-overview">
           <div className="dashboard-welcome"><div><p className="eyebrow">نظرة عامة</p><h3>مرحبا {currentUser.display_name}</h3><p>ها ملخص النشاط ديال الشركة، وتقدر تمشي مباشرة لأي عملية.</p></div><span className="dashboard-date">{new Date().toLocaleDateString('ar-MA',{weekday:'long',day:'numeric',month:'long'})}</span></div>
@@ -1006,7 +1007,9 @@ export default function App() {
           <div className="section-divider"></div><h4>جلسات التحصيل</h4>
           {cashSessions.length===0?<p className="hint">مازال ما تسجل حتى تحصيل نقدي من عمليات التوصيل.</p>:cashSessions.map(session=><article className="team-row" key={session.id}><div><strong>{session.user_name} · {session.vehicle_label||'بدون سيارة'}</strong><span>المفروض: {formatMad(session.expected_cash_minor)} · تسلم: {formatMad(session.handed_cash_minor)} · باقي: {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</span><span>الحالة: {session.status==='open'?'مفتوحة':session.status==='submitted'?'تسلمات للديبو':'تمت المطابقة'}</span>{session.status==='reconciled'&&<span>النقد المعدود: {formatMad(Number(session.counted_cash_minor??0))} · الفرق: {formatSignedMad(Number(session.counted_cash_minor??0)-Number(session.expected_cash_minor))}{session.discrepancy_reason?' · السبب: '+session.discrepancy_reason:''}</span>}{session.status==='submitted'&&<div className="order-actions"><label>النقد المعدود فعلياً (DH)<input type="number" min="0" step="0.01" value={cashCountedAmounts[session.id]??''} onChange={e=>setCashCountedAmounts(current=>({...current,[session.id]:e.target.value}))}/></label><label>سبب الفرق إذا ما تطابقش<input value={cashDiscrepancyReasons[session.id]??''} onChange={e=>setCashDiscrepancyReasons(current=>({...current,[session.id]:e.target.value}))} placeholder="مثلاً: نقص نقدي أو خطأ فالعد"/></label><button type="button" className="secondary-button" disabled={saving} onClick={()=>reconcileCashSession(session)}>تأكيد المطابقة</button></div>}</div></article>)}
         </section>
+        <DistributionOperationsPanel user={currentUser} users={teamUsers} vehicles={teamVehicles} customers={customers}/>
       </div>}
+      {currentUser&&currentUser.role!=='owner'&&<div className="content-grid"><DistributionOperationsPanel user={currentUser} users={teamUsers} vehicles={teamVehicles} customers={customers}/></div>}
       <footer>تطبيقي · بيانات التطوير محلية على الجهاز · لا تستعملها للمحاسبة الفعلية بعد</footer>
     </main>
   );
