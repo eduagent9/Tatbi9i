@@ -104,7 +104,7 @@ export function DataBackupPanel() {
     }finally{setBusy(false);}
   }
 
-  return <section className="panel backup-panel">
+  return <section data-section="management" className="panel backup-panel">
     <div className="panel-heading"><div><h3>حماية البيانات والنسخ الاحتياطي</h3><p>نسخة محلية من قاعدة بيانات التطبيق كاملة</p></div><span className="step-mark">13</span></div>
     <p className="hint">النسخة كتضم المنتجات والزبناء والفواتير والأداءات والتوريدات والمخزون والحركات. الملف كيتحفظ عندك، وما كيتصيفط حتى لخادم خارجي. النسخة بصيغة JSON غير مشفرة؛ خزنها فمكان آمن.</p>
     {message&&<p className="hint" role="status">{message}</p>}
