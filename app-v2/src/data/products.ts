@@ -11,6 +11,7 @@ export interface ProductInput {
   salePriceMinor: number;
   lowStockThreshold?: number;
   barcode?: string | null;
+  imageLocalUri?: string | null;
 }
 
 export interface ProductRecord {
@@ -25,6 +26,7 @@ export interface ProductRecord {
   low_stock_threshold: number;
   total_stock: number;
   barcode: string | null;
+  image_local_uri: string | null;
 }
 
 function requiredText(value: string, label: string): string {
@@ -60,9 +62,9 @@ export class ProductRepository {
     try {
       await this.db.run(
         `INSERT INTO products
-        (id,name,category,subcategory,base_unit,pieces_per_carton,purchase_cost_minor,sale_price_minor,low_stock_threshold,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-        [id,name,input.category?.trim() || null,input.subcategory?.trim() || null,unit,pieces,cost,price,threshold,timestamp,timestamp],
+        (id,name,category,subcategory,base_unit,pieces_per_carton,purchase_cost_minor,sale_price_minor,low_stock_threshold,image_local_uri,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [id,name,input.category?.trim() || null,input.subcategory?.trim() || null,unit,pieces,cost,price,threshold,input.imageLocalUri?.trim()||null,timestamp,timestamp],
       );
       if (barcode) {
         await this.db.run(
@@ -90,8 +92,8 @@ export class ProductRepository {
     try{
       const current=await this.db.query('SELECT id FROM products WHERE id=? AND is_active=1',[id]);
       if(!current.values?.length)throw new Error('المنتج غير موجود أو مؤرشف.');
-      await this.db.run('UPDATE products SET name=?,category=?,subcategory=?,base_unit=?,pieces_per_carton=?,purchase_cost_minor=?,sale_price_minor=?,low_stock_threshold=?,updated_at=? WHERE id=?',
-        [name,input.category?.trim()||null,input.subcategory?.trim()||null,unit,pieces,cost,price,threshold,timestamp,id]);
+      await this.db.run('UPDATE products SET name=?,category=?,subcategory=?,base_unit=?,pieces_per_carton=?,purchase_cost_minor=?,sale_price_minor=?,low_stock_threshold=?,image_local_uri=?,updated_at=? WHERE id=?',
+        [name,input.category?.trim()||null,input.subcategory?.trim()||null,unit,pieces,cost,price,threshold,input.imageLocalUri?.trim()||null,timestamp,id]);
       await this.db.run('DELETE FROM barcodes WHERE product_id=? AND variant_id IS NULL',[id]);
       if(barcode)await this.db.run('INSERT INTO barcodes (id,product_id,barcode,unit,units_per_scan) VALUES (?,?,?,?,?)',[id+':barcode',id,barcode,unit,unit==='carton'?pieces:1]);
       await this.db.run('INSERT INTO audit_events (id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?)',[crypto.randomUUID(),'product.updated','product',id,JSON.stringify({name,category:input.category??null,subcategory:input.subcategory??null,unit,pieces,cost,price,threshold,barcode}),timestamp]);
@@ -115,7 +117,7 @@ export class ProductRepository {
   async list(): Promise<ProductRecord[]> {
     const result = await this.db.query(
       `SELECT p.id,p.name,p.category,p.subcategory,p.base_unit,p.pieces_per_carton,
-       p.purchase_cost_minor,p.sale_price_minor,p.low_stock_threshold,
+       p.purchase_cost_minor,p.sale_price_minor,p.low_stock_threshold,p.image_local_uri,
        COALESCE(SUM(sb.quantity),0) AS total_stock,
        (SELECT b.barcode FROM barcodes b WHERE b.product_id=p.id ORDER BY b.id LIMIT 1) AS barcode
        FROM products p
