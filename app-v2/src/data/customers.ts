@@ -26,6 +26,19 @@ export class CustomerRepository {
     );
   }
 
+  async update(input:CustomerInput):Promise<void>{
+    const id=clean(input.id,'معرّف الزبون'),name=clean(input.name,'اسم الزبون'),timestamp=this.now();
+    await this.db.beginTransaction();
+    try{
+      const found=await this.db.query('SELECT id FROM customers WHERE id=? AND is_active=1',[id]);
+      if(!found.values?.length)throw new Error('الزبون غير موجود أو مؤرشف.');
+      await this.db.run('UPDATE customers SET name=?,phone=?,city=?,region=?,address=?,notes=?,updated_at=? WHERE id=?',
+        [name,input.phone?.trim()||null,input.city?.trim()||null,input.region?.trim()||null,input.address?.trim()||null,input.notes?.trim()||null,timestamp,id]);
+      await this.db.run('INSERT INTO audit_events (id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?)',[crypto.randomUUID(),'customer.updated','customer',id,JSON.stringify({name,phone:input.phone??null,city:input.city??null}),timestamp]);
+      await this.db.commitTransaction();
+    }catch(error){await this.db.rollbackTransaction().catch(()=>undefined);throw error;}
+  }
+
   async list(search=''):Promise<CustomerRecord[]> {
     const term='%'+search.trim().replace(/[\\%_]/g,'\\$&')+'%';
     const result=await this.db.query(
