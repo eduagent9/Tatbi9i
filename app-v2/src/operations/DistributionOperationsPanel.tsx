@@ -8,6 +8,7 @@ type User={id:string;display_name:string;role:AppRole;is_active:number};
 type Vehicle={id:string;code:string;label:string;vehicle_type:'van_sales'|'delivery';assigned_user_id:string|null;assigned_name?:string|null};
 type Customer={id:string;name:string};
 type Product={id:string;name:string;purchase_cost_minor:number};
+type RouteOrder={id:string;order_number:string;customer_id:string};
 type RouteRow={id:string;route_code:string;name:string;planned_date:string;vehicle_label:string;driver_user_id:string;driver_name:string;status:'planned'|'started'|'completed'|'cancelled';stop_count:number};
 type StopRow={id:string;route_id:string;stop_order:number;customer_id:string;customer_name:string;order_id:string|null;status:string;failure_reason:string|null};
 type VehicleStockRow={product_id:string;product_name:string;variant_id:string|null;variant_name:string|null;batch_id:string|null;batch_code:string|null;quantity:number};
@@ -18,6 +19,8 @@ const statusLabel:Record<string,string>={planned:'مخططة',started:'جاري�
 export function DistributionOperationsPanel({user,users,vehicles,customers,products}:Props){
  const [routes,setRoutes]=useState<RouteRow[]>([]);
  const [stops,setStops]=useState<StopRow[]>([]);
+ const [readyOrders,setReadyOrders]=useState<RouteOrder[]>([]);
+ const [routeOrderIds,setRouteOrderIds]=useState<Record<string,string>>({});
  const [accounts,setAccounts]=useState<SupplierAccountRow[]>([]);
  const [aging,setAging]=useState<CustomerAgingRow[]>([]);
  const [creditLimits,setCreditLimits]=useState<Record<string,string>>({});
@@ -50,7 +53,7 @@ export function DistributionOperationsPanel({user,users,vehicles,customers,produ
  const assignedVehicle=vehicles.find(v=>(v.vehicle_type==='delivery'||v.vehicle_type==='van_sales')&&v.assigned_user_id===user.id);
  const load=useCallback(async()=>{
   const db=await openAppDatabase(),repo=new DistributionRepository(db);
-  const [r,s,a,g,c]=await Promise.all([
+  const [r,s,o,a,g,c]=await Promise.all([
    db.query(`SELECT r.id,r.route_code,r.name,r.planned_date,v.label AS vehicle_label,r.driver_user_id,u.display_name AS driver_name,r.status,
     (SELECT COUNT(*) FROM delivery_route_stops x WHERE x.route_id=r.id) AS stop_count
     FROM delivery_routes r JOIN vehicles v ON v.id=r.vehicle_id JOIN users u ON u.id=r.driver_user_id
@@ -60,11 +63,13 @@ export function DistributionOperationsPanel({user,users,vehicles,customers,produ
     FROM delivery_route_stops s JOIN customers c ON c.id=s.customer_id
     JOIN delivery_routes r ON r.id=s.route_id WHERE r.status IN ('planned','started')
     ORDER BY r.planned_date,s.route_id,s.stop_order`),
+   db.query("SELECT id,order_number,customer_id FROM sales_orders WHERE status IN ('ready','partially_delivered') ORDER BY created_at DESC"),
    repo.listSupplierAccounts(),repo.listCustomerAging(),
    db.query('SELECT id,credit_limit_minor FROM customers WHERE is_active=1')
   ]);
   setRoutes((r.values??[]) as unknown as RouteRow[]);
   setStops((s.values??[]) as unknown as StopRow[]);
+  setReadyOrders((o.values??[]) as unknown as RouteOrder[]);
   setAccounts(a);setAging(g);
   setCreditLimits(Object.fromEntries((c.values??[]).map(row=>[String(row.id),String(row.credit_limit_minor??0)])));
   if(assignedVehicle){
@@ -97,8 +102,8 @@ export function DistributionOperationsPanel({user,users,vehicles,customers,produ
   const selected=routeStops.filter(Boolean);
   if(!selected.length)throw new Error('زيد محطة واحدة على الأقل.');
   const db=await openAppDatabase();
-  await new DistributionRepository(db).createRoute({id:crypto.randomUUID(),code:'TR-'+Date.now(),name:routeName||'جولة '+routeDate,plannedDate:routeDate,vehicleId:vehicle.id,driverUserId:vehicle.assigned_user_id,createdBy:user.id,stops:selected.map((customerId,index)=>({id:crypto.randomUUID(),customerId,stopOrder:index+1}))});
-  setRouteName('');setRouteStops(['']);
+  await new DistributionRepository(db).createRoute({id:crypto.randomUUID(),code:'TR-'+Date.now(),name:routeName||'جولة '+routeDate,plannedDate:routeDate,vehicleId:vehicle.id,driverUserId:vehicle.assigned_user_id,createdBy:user.id,stops:selected.map((customerId,index)=>({id:crypto.randomUUID(),customerId,orderId:routeOrderIds[customerId]||null,stopOrder:index+1}))});
+  setRouteName('');setRouteStops(['']);setRouteOrderIds({});
  }
  async function recordPayment(){
   if(!canManage)throw new Error('ما عندكش صلاحية أداء الموردين.');
@@ -141,7 +146,7 @@ export function DistributionOperationsPanel({user,users,vehicles,customers,produ
    <form onSubmit={e=>{e.preventDefault();void action(createRoute,'تسجلات الجولة وتربطات بالسائق.');}}>
     <label>اسم الجولة<input value={routeName} onChange={e=>setRouteName(e.target.value)} placeholder="مثلاً: وسط المدينة"/></label>
     <div className="two-cols"><label>التاريخ<input type="date" required value={routeDate} onChange={e=>setRouteDate(e.target.value)}/></label><label>سيارة التوصيل<select required value={routeVehicle} onChange={e=>setRouteVehicle(e.target.value)}><option value="">اختار السيارة والسائق</option>{vehicles.filter(v=>v.vehicle_type==='delivery'&&v.assigned_user_id).map(v=><option key={v.id} value={v.id}>{v.label} · {v.assigned_name||users.find(u=>u.id===v.assigned_user_id)?.display_name}</option>)}</select></label></div>
-    {routeStops.map((stop,index)=><div className="two-cols" key={index}><label>المحطة {index+1}<select required value={stop} onChange={e=>setRouteStops(rows=>rows.map((x,i)=>i===index?e.target.value:x))}><option value="">اختار الزبون</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><button type="button" className="remove-line" disabled={routeStops.length===1} onClick={()=>setRouteStops(rows=>rows.filter((_,i)=>i!==index))}>حذف المحطة</button></div>)}
+    {routeStops.map((stop,index)=><div className="route-stop" key={index}><label>المحطة {index+1}<select required value={stop} onChange={e=>setRouteStops(rows=>rows.map((x,i)=>i===index?e.target.value:x))}><option value="">اختار الزبون</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>طلب جاهز (اختياري)<select value={routeOrderIds[stop]??''} onChange={e=>setRouteOrderIds(rows=>({...rows,[stop]:e.target.value}))}><option value="">زيارة فقط بلا طلب</option>{readyOrders.filter(order=>order.customer_id===stop).map(order=><option key={order.id} value={order.id}>{order.order_number}</option>)}</select></label><button type="button" className="remove-line" disabled={routeStops.length===1} onClick={()=>setRouteStops(rows=>rows.filter((_,i)=>i!==index))}>حذف المحطة</button></div>)}
     <button type="button" className="secondary-button" onClick={()=>setRouteStops(rows=>[...rows,''])}>+ إضافة محطة</button>
     <button className="primary-button" disabled={busy||!routeVehicle||customers.length===0}>إنشاء الجولة</button>
    </form>
