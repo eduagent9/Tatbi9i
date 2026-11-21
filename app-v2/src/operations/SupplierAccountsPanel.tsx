@@ -1,4 +1,4 @@
-import {useCallback,useEffect,useState} from 'react';
+import {useCallback,useEffect,useState,type FormEvent} from 'react';
 import {formatMad,madToMinorUnits} from '../data/money';
 import {openAppDatabase} from '../data/sqlite-database';
 import {DistributionRepository,type SupplierAccountRow} from '../data/distribution';
@@ -16,7 +16,7 @@ export function SupplierAccountsPanel({ownerId,suppliers}:{ownerId:string;suppli
  const [error,setError]=useState('');
  const load=useCallback(async()=>{const db=await openAppDatabase();setAccounts(await new DistributionRepository(db).listSupplierAccounts());},[]);
  useEffect(()=>{load().catch(e=>setError(e instanceof Error?e.message:'تعذر تحميل حسابات الموردين.'));},[load]);
- async function pay(event:React.FormEvent<HTMLFormElement>){
+ async function pay(event:FormEvent<HTMLFormElement>){
   event.preventDefault();setBusy(true);setError('');setMessage('');
   try{
    const db=await openAppDatabase(),repo=new DistributionRepository(db),amountMinor=madToMinorUnits(Number(amount));
