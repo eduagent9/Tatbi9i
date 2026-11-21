@@ -21,6 +21,7 @@ The initial schema and append-only migrations are wired into the Capacitor SQLit
 8. `008_invoice_batch_allocations.sql`: exact FEFO batch quantities consumed by invoice lines.
 9. `009_user_pin_auth.sql`: salted PIN credentials for local user authentication.
 10. `010_distribution_operations.sql`: customer credit limits, route plans and ordered stops, delivery proof metadata, vehicle day settlement and stock counts, supplier payments and supplier returns.
+11. `011_variant_vehicle_counts.sql`: variant-aware vehicle stock count history without changing the original count table.
 
 Never edit a migration that may have shipped. Add the next sequential migration instead.
 
