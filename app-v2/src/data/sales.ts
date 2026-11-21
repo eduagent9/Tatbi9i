@@ -67,6 +67,18 @@ export class SalesRepository {
 
     if (transactionMode === 'managed') await this.db.beginTransaction();
     try {
+      const customerCredit = await this.db.query('SELECT credit_limit_minor FROM customers WHERE id=? AND is_active=1',[customerId]);
+      if (!customerCredit.values?.length) throw new Error('الزبون غير موجود أو غير نشيط.');
+      const creditLimit = Number(customerCredit.values[0].credit_limit_minor ?? 0);
+      if (creditLimit > 0) {
+        const debtRows = await this.db.query(`SELECT COALESCE(SUM(MAX(0,total_minor-collected_minor)),0) AS due_minor
+          FROM invoices WHERE customer_id=? AND confirmed_at IS NOT NULL AND status NOT IN ('returned','voided')`,[customerId]);
+        const existingDebt = Number(debtRows.values?.[0]?.due_minor ?? 0);
+        const newDebt = totalMinor - collectedMinor;
+        if (!Number.isSafeInteger(existingDebt) || existingDebt + newDebt > creditLimit) {
+          throw new Error('تجاوز البيع سقف الدين ديال الزبون. الدين الحالي '+existingDebt+' سنتيم، السقف '+creditLimit+' سنتيم.');
+        }
+      }
       await this.db.run(
         `INSERT INTO invoices
          (id,invoice_number,customer_id,order_id,seller_user_id,vehicle_id,status,subtotal_minor,offer_discount_minor,total_minor,collected_minor,confirmed_at,created_at,updated_at)
