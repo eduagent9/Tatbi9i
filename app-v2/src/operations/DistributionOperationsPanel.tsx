@@ -47,7 +47,7 @@ export function DistributionOperationsPanel({user,users,vehicles,customers,produ
  const [notice,setNotice]=useState('');
 
  const canManage= user.role==='owner'||user.role==='depot_manager';
- const assignedVehicle=vehicles.find(v=>v.vehicle_type==='delivery'&&v.assigned_user_id===user.id);
+ const assignedVehicle=vehicles.find(v=>(v.vehicle_type==='delivery'||v.vehicle_type==='van_sales')&&v.assigned_user_id===user.id);
  const load=useCallback(async()=>{
   const db=await openAppDatabase(),repo=new DistributionRepository(db);
   const [r,s,a,g,c]=await Promise.all([
@@ -120,7 +120,7 @@ export function DistributionOperationsPanel({user,users,vehicles,customers,produ
   const db=await openAppDatabase();await new DistributionRepository(db).setCustomerCreditLimit(customerId,limit,user.id);
  }
  async function startVehicleDay(){
-  if(!assignedVehicle)throw new Error('ما عندكش سيارة توصيل معيّنة.');
+  if(!assignedVehicle)throw new Error('ما عندكش سيارة معيّنة.');
   const db=await openAppDatabase();
   const cash=await db.query("SELECT COALESCE(SUM(expected_cash_minor),0) AS amount FROM cash_sessions WHERE vehicle_id=? AND user_id=? AND status='open'",[assignedVehicle.id,user.id]);
   await new DistributionRepository(db).startVehicleDay({id:crypto.randomUUID(),vehicleId:assignedVehicle.id,responsibleUserId:user.id,businessDate:new Date().toISOString().slice(0,10),openingOdometer:odometer===''?null:Number(odometer),openingCashMinor:madToMinorUnits(Number(openingCash||0)),expectedCashMinor:Number(cash.values?.[0]?.amount??0)});
@@ -132,7 +132,7 @@ export function DistributionOperationsPanel({user,users,vehicles,customers,produ
   setNotice('تسدات جلسة السيارة. فرق النقدية: '+formatMad(result.cashDifferenceMinor)+' · اختلافات المخزون: '+result.stockVariances);
  }
 
- const driverRoutes=useMemo(()=>routes.filter(r=>user.role==='delivery_driver'?r.driver_user_id===user.id:true),[routes,user]);
+ const driverRoutes=useMemo(()=>routes.filter(r=>user.role==='delivery_driver'?r.driver_user_id===user.id:user.role==='owner'||user.role==='depot_manager'),[routes,user]);
  return <section data-section="distribution" className="panel distribution-operations">
   <div className="panel-heading"><div><h3>التوزيع والجولات وتسوية السيارات</h3><p>مسارات الزيارات، إثبات التسليم، حسابات الموردين والديون</p></div><span className="step-mark">التوزيع</span></div>
   {error&&<p className="message error" role="alert">{error}</p>}{notice&&<p className="message success" role="status">{notice}</p>}
@@ -181,7 +181,7 @@ export function DistributionOperationsPanel({user,users,vehicles,customers,produ
    {aging.filter(a=>a.total_due_minor>0).map(a=><article className="customer-row" key={a.customer_id}><div><strong>{a.customer_name}</strong><span>حالي {formatMad(a.current_minor)} · 1–30 يوم {formatMad(a.days_1_30_minor)} · 31–60 يوم {formatMad(a.days_31_60_minor)} · 61–90 يوم {formatMad(a.days_61_90_minor)} · أكثر من 90 يوم {formatMad(a.over_90_minor)}</span></div><strong>{formatMad(a.total_due_minor)}</strong></article>)}
    {aging.every(a=>a.total_due_minor===0)&&<p className="hint">ما كايناش ديون مستحقة.</p>}
   </div>}
-  {user.role==='delivery_driver'&&assignedVehicle&&<div className="distribution-subpanel"><h4>بداية ونهاية يوم السيارة</h4>
+  {(user.role==='delivery_driver'||user.role==='van_sales')&&assignedVehicle&&<div className="distribution-subpanel"><h4>بداية ونهاية يوم السيارة</h4>
    {!vehicleSession?<form onSubmit={e=>{e.preventDefault();void action(startVehicleDay,'تفتحات جلسة يوم السيارة.');}}><label>عداد الكيلومترات عند البداية<input type="number" min="0" step="0.1" value={odometer} onChange={e=>setOdometer(e.target.value)}/></label><label>الصندوق الافتتاحي (DH)<input type="number" min="0" step="0.01" value={openingCash} onChange={e=>setOpeningCash(e.target.value)}/></label><button className="primary-button" disabled={busy}>فتح يوم السيارة</button></form>
    :<form onSubmit={e=>{e.preventDefault();void action(closeVehicleDay,'تسدات جلسة السيارة وتسجل الجرد والمطابقة.');}}><p className="hint">تاريخ الجلسة: {vehicleSession.business_date} · مخزون السيارة الحالي: {counts.length} سطر</p>{counts.map(row=><label key={row.product_id+'|'+row.variant_id+'|'+row.batch_id}>{row.product_name}{row.variant_name?' · '+row.variant_name:''}{row.batch_code?' · '+row.batch_code:''} (المتوقع {row.quantity})<input type="number" min="0" step="0.01" value={countValues[row.product_id+'|'+(row.variant_id??'')+'|'+(row.batch_id??'')]??String(row.quantity)} onChange={e=>setCountValues(x=>({...x,[row.product_id+'|'+(row.variant_id??'')+'|'+(row.batch_id??'')]:e.target.value}))}/></label>)}<label>النقد المعدود عند الإغلاق (DH)<input required type="number" min="0" step="0.01" value={closingCash} onChange={e=>setClosingCash(e.target.value)}/></label><label>عداد الكيلومترات عند الإغلاق<input type="number" min="0" step="0.1" value={closingOdometer} onChange={e=>setClosingOdometer(e.target.value)}/></label><button className="primary-button" disabled={busy}>إغلاق اليوم ومطابقة السيارة</button></form>}
   </div>}
