@@ -102,8 +102,12 @@ export default function App() {
   const [stockDirection, setStockDirection] = useState<'in' | 'out'>('in');
   const [stockOutType, setStockOutType] = useState<'delivery' | 'damage' | 'supplier_return'>('delivery');
   const [barcodeScanning,setBarcodeScanning]=useState(false);
-  const [activeSection,setActiveSection]=useState<'home'|'sales'|'orders'|'inventory'|'purchases'|'relations'|'management'>('home');
+  const [activeSection,setActiveSection]=useState<'home'|'catalog'|'sales'|'orders'|'inventory'|'purchases'|'relations'|'management'>('home');
   const [productColumns,setProductColumns]=useState<1|2|3>(2);
+  const [catalogSearch,setCatalogSearch]=useState('');
+  const [catalogGallery,setCatalogGallery]=useState<string[]>([]);
+  const [catalogGalleryTitle,setCatalogGalleryTitle]=useState('');
+  const [catalogGalleryIndex,setCatalogGalleryIndex]=useState(0);
 
   const refresh = useCallback(async (repo: ProductRepository) => setProducts(await repo.list()), []);
   useEffect(() => {
@@ -723,6 +727,11 @@ export default function App() {
     finally { setSaving(false); }
   }
 
+  async function openCatalogGallery(product:ProductRecord){
+    try{const db=await openAppDatabase();const rows=await new ProductImagesRepository(db).list(product.id);const images=rows.map(row=>row.image_data_uri);setCatalogGallery(images.length?images:(product.image_data_uri?[product.image_data_uri]:[]));setCatalogGalleryTitle(product.name);setCatalogGalleryIndex(0);}
+    catch(reason){setError(reason instanceof Error?reason.message:'تعذر فتح صور المنتج.');}
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     if(!requirePermission('manage_products'))return;
     event.preventDefault();
@@ -744,7 +753,7 @@ export default function App() {
   return (
     <main className="app-shell personal-mode" dir="rtl">
       <header className="topbar"><div><span className="brand-mark">ت</span><div><p className="eyebrow">إدارة نشاطك التجاري الشخصي</p><h1>تطبيقي</h1></div></div><div className="topbar-actions">{currentUser&&<><span className="mode-tag">{currentUser.display_name} · {roleLabels[currentUser.role]}</span><button type="button" className="secondary-button" onClick={logoutUser}>خروج</button></>}<span className="mode-tag">نسخة تطوير</span></div></header>
-      <section className="page-heading"><div><p className="eyebrow">إدارة نشاطك الشخصي</p><h2>{currentUser?.role==='owner'?({home:'الرئيسية',sales:'البيع المباشر',orders:'الطلبات والتسليم',inventory:'المخزون',purchases:'المشتريات',relations:'الزبناء والموردون',management:'الحسابات'} as const)[activeSection]:'مساحة العمل'}</h2><p>{currentUser?.role==='owner'?'البيع والطلبات والمخزون والحسابات في مكان واحد':'مرحبا بك في مساحة العمل الخاصة بدورك'}</p></div><div className="total-card"><strong>{products.length}</strong><span>منتج مسجل</span></div></section>
+      <section className="page-heading"><div><p className="eyebrow">إدارة نشاطك الشخصي</p><h2>{currentUser?.role==='owner'?({home:'الرئيسية',catalog:'معرض المنتجات',sales:'البيع المباشر',orders:'الطلبات والتسليم',inventory:'المخزون',purchases:'المشتريات',relations:'الزبناء والموردون',management:'الحسابات'} as const)[activeSection]:'مساحة العمل'}</h2><p>{currentUser?.role==='owner'?'البيع والطلبات والمخزون والحسابات في مكان واحد':'مرحبا بك في مساحة العمل الخاصة بدورك'}</p></div><div className="total-card"><strong>{products.length}</strong><span>منتج مسجل</span></div></section>
       {loading && <div className="message">كنوجد قاعدة البيانات...</div>}
       {!loading && error && <div className="message error" role="alert">{error}<small>المعاينة فالمتصفح ما كتخزنش البيانات؛ افتح تطبيق Android المبني باش تجرب SQLite.</small></div>}
       {notice && <div className="message success" role="status">{notice}</div>}
@@ -844,7 +853,7 @@ export default function App() {
           </form>
         </section>
       </div>}
-      {currentUser?.role==='owner'&&repository&&<nav className="main-section-nav" aria-label="الأقسام الرئيسية">{([{id:'home',label:'الرئيسية'},{id:'sales',label:'البيع المباشر'},{id:'orders',label:'الطلبات'},{id:'inventory',label:'المخزون'},{id:'purchases',label:'المشتريات'},{id:'relations',label:'الزبناء'},{id:'management',label:'الحسابات'}] as const).map(item=><button type="button" key={item.id} className={activeSection===item.id?'active':''} aria-current={activeSection===item.id?'page':undefined} onClick={()=>setActiveSection(item.id)}>{item.label}</button>)}</nav>}
+      {currentUser?.role==='owner'&&repository&&<nav className="main-section-nav" aria-label="الأقسام الرئيسية">{([{id:'home',label:'الرئيسية'},{id:'catalog',label:'معرض المنتجات'},{id:'sales',label:'البيع المباشر'},{id:'orders',label:'الطلبات'},{id:'inventory',label:'المخزون'},{id:'purchases',label:'المشتريات'},{id:'relations',label:'الزبناء'},{id:'management',label:'الحسابات'}] as const).map(item=><button type="button" key={item.id} className={activeSection===item.id?'active':''} aria-current={activeSection===item.id?'page':undefined} onClick={()=>setActiveSection(item.id)}>{item.label}</button>)}</nav>}
       {currentUser?.role==='owner'&&repository && <div className="content-grid section-view" data-active-section={activeSection}>
         <section data-section="home" className="dashboard-overview">
           <div className="dashboard-welcome"><div><p className="eyebrow">نظرة عامة</p><h3>مرحبا {currentUser.display_name}</h3><p>ها ملخص النشاط ديال الشركة، وتقدر تمشي مباشرة لأي عملية.</p></div><span className="dashboard-date">{new Date().toLocaleDateString('ar-MA',{weekday:'long',day:'numeric',month:'long'})}</span></div>
@@ -862,6 +871,15 @@ export default function App() {
             <button type="button" onClick={()=>setActiveSection('management')}><b>▤</b><span>التقارير والإدارة</span></button>
           </div></div>
           <div className="dashboard-bottom"><article><strong>الطلبات المفتوحة</strong><b>{distributionOrders.filter(order=>!['delivered','cancelled'].includes(order.status)).length}</b><span>طلبات تحتاج متابعة</span></article><article><strong>تنبيهات الصلاحية</strong><b>{expiryAlerts.length}</b><span>دفعات مسجلة بتاريخ صلاحية</span></article><article><strong>فواتير مؤكدة</strong><b>{financialSummary?.invoiceCount??0}</b><span>إجمالي الفواتير</span></article></div>
+        </section>
+        <section data-section="catalog" className="panel catalog-panel">
+          <div className="panel-heading"><div><h3>معرض المنتجات</h3><p>تصفح صور المنتجات ومعلوماتها بدون إظهار كميات المخزون</p></div><span className="step-mark">{products.length}</span></div>
+          <input className="search-input" value={catalogSearch} onChange={e=>setCatalogSearch(e.target.value)} placeholder="قلب على منتج بالاسم أو الصنف أو الباركود..."/>
+          <div className="personal-product-grid" style={{gridTemplateColumns:`repeat(${productColumns},minmax(0,1fr))`}}>{products.filter(product=>[product.name,product.category??'',product.subcategory??'',product.barcode??''].some(value=>value.toLowerCase().includes(catalogSearch.toLowerCase()))).map(product=><article className="personal-product-card" key={product.id}>
+            <div className="personal-product-image" role="button" tabIndex={0} onClick={()=>openCatalogGallery(product)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openCatalogGallery(product);}}}>{product.image_data_uri?<img src={product.image_data_uri} alt={product.name}/>:<div className="personal-product-placeholder">صورة المنتج</div>}</div>
+            <div className="personal-product-info"><strong>{product.name}</strong><span>{formatMad(product.sale_price_minor)} · {product.total_stock>0?'متوفر':'غير متوفر'}</span></div>
+          </article>)}</div>
+          {catalogGallery.length>0&&<div className="product-gallery-lightbox" role="dialog" aria-modal="true" aria-label={'صور '+catalogGalleryTitle} onClick={()=>setCatalogGallery([])}><button type="button" className="gallery-close" aria-label="إغلاق" onClick={()=>setCatalogGallery([])}>×</button><button type="button" className="gallery-arrow" disabled={catalogGallery.length<2} onClick={e=>{e.stopPropagation();setCatalogGalleryIndex(i=>(i-1+catalogGallery.length)%catalogGallery.length);}}>‹</button><figure onClick={e=>e.stopPropagation()}><img src={catalogGallery[catalogGalleryIndex]} alt={catalogGalleryTitle}/><figcaption>{catalogGalleryTitle} · {catalogGalleryIndex+1}/{catalogGallery.length}</figcaption></figure><button type="button" className="gallery-arrow" disabled={catalogGallery.length<2} onClick={e=>{e.stopPropagation();setCatalogGalleryIndex(i=>(i+1)%catalogGallery.length);}}>›</button></div>}
         </section>
         <section data-section="sales" className="panel team-panel">
           <div className="panel-heading"><div><h3>طلبات المحلات</h3><p>مندوب الطلبات يسجل طلب الزبون، والديبو يتابع التحضير والتجهيز</p></div><span className="step-mark">01</span></div>
