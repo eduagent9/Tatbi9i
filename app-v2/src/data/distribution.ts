@@ -231,7 +231,7 @@ export class DistributionRepository {
     const now=this.now();await this.db.beginTransaction();
     try{
       const vehicle=await this.db.query("SELECT id,vehicle_type,assigned_user_id FROM vehicles WHERE id=? AND is_active=1",[input.vehicleId]);
-      const v=vehicle.values?.[0];if(!v||String(v.vehicle_type)!=='delivery'||String(v.assigned_user_id)!==input.responsibleUserId)throw new Error('السيارة ماشي سيارة توصيل معيّنة لهذا المستخدم.');
+      const v=vehicle.values?.[0];if(!v||!['delivery','van_sales'].includes(String(v.vehicle_type))||String(v.assigned_user_id)!==input.responsibleUserId)throw new Error('السيارة ماشي سيارة نشيطة معيّنة لهذا المستخدم.');
       await this.db.run("INSERT INTO vehicle_day_sessions (id,vehicle_id,responsible_user_id,business_date,opening_odometer,opening_cash_minor,expected_cash_minor,status,opened_at) VALUES (?,?,?,?,?,?,?,'open',?)",[input.id,input.vehicleId,input.responsibleUserId,input.businessDate,input.openingOdometer??null,openingCash,expectedCash,now]);
       await this.db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[this.makeId(),input.responsibleUserId,'vehicle.day_opened','vehicle_day_session',input.id,JSON.stringify({businessDate:input.businessDate,openingCashMinor:openingCash,expectedCashMinor:expectedCash,openingOdometer:input.openingOdometer??null}),now]);
       await this.db.commitTransaction();
