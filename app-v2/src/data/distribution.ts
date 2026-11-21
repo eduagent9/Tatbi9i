@@ -182,12 +182,13 @@ export class DistributionRepository {
           ORDER BY sb.updated_at,sb.id`,[line.productId,line.variantId,line.batchId,line.batchId]);
         const rows=balances.values??[],available=rows.reduce((sum,row)=>sum+Number(row.quantity),0);
         if(available+1e-9<line.quantity)throw new Error('المخزون المتوفر فالديبو ما كافيش لإرجاع المنتج للمورد.');
-        let remaining=line.quantity;
+        let remaining=line.quantity,remainingTotal=line.lineTotalMinor;
         for(const balance of rows){
           if(remaining<=1e-9)break;
           const take=Math.min(remaining,Number(balance.quantity));
+          const lineTotal=take>=remaining-1e-9?remainingTotal:Math.round(take*line.unitCostMinor);
+          remainingTotal-=lineTotal;
           await this.db.run('UPDATE stock_balances SET quantity=?,updated_at=? WHERE id=?',[Number(balance.quantity)-take,now,balance.id]);
-          const lineTotal=Math.round(take*line.unitCostMinor);
           await this.db.run('INSERT INTO supplier_return_lines (id,supplier_return_id,product_id,batch_id,quantity,unit_cost_minor,line_total_minor,product_name_snapshot) VALUES (?,?,?,?,?,?,?,?)',[this.makeId(),headerId,line.productId,balance.batch_id??null,take,line.unitCostMinor,lineTotal,String(balance.product_name)]);
           await this.db.run("INSERT INTO stock_movements (id,product_id,variant_id,batch_id,from_location_id,to_location_id,quantity,movement_type,reference_type,reference_id,performed_by,responsible_user_id,occurred_at,note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",[this.makeId(),line.productId,line.variantId,balance.batch_id??null,'loc-depot-main',null,take,'supplier_return','supplier_return',headerId,actor,actor,now,'إرجاع للمورد: '+reason]);
           remaining-=take;lineCount++;
