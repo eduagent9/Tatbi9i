@@ -13,6 +13,18 @@ export class SupplierRepository {
       [id,name,input.phone?.trim()||null,input.address?.trim()||null,timestamp,timestamp],
     );
   }
+  async update(input:SupplierInput):Promise<void>{
+    const id=required(input.id,'معرّف المورد'),name=required(input.name,'اسم المورد'),timestamp=this.now();
+    await this.db.beginTransaction();
+    try{
+      const found=await this.db.query('SELECT id FROM suppliers WHERE id=?',[id]);
+      if(!found.values?.length)throw new Error('المورد غير موجود.');
+      await this.db.run('UPDATE suppliers SET name=?,phone=?,address=?,updated_at=? WHERE id=?',[name,input.phone?.trim()||null,input.address?.trim()||null,timestamp,id]);
+      await this.db.run('INSERT INTO audit_events (id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?)',[crypto.randomUUID(),'supplier.updated','supplier',id,JSON.stringify({name,phone:input.phone??null,address:input.address??null}),timestamp]);
+      await this.db.commitTransaction();
+    }catch(error){await this.db.rollbackTransaction().catch(()=>undefined);throw error;}
+  }
+
   async list(search=''):Promise<SupplierRecord[]> {
     const term='%'+search.trim().replace(/[\\%_]/g,'\\$&')+'%';
     const result=await this.db.query(
