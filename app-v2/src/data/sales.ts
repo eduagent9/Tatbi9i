@@ -105,7 +105,7 @@ export class SalesRepository {
           [line.product.id,line.variantId,locationId,input.orderId??null,input.orderId??null]);
         const reservedByOtherOrders = Number(reservedResult.values?.[0]?.quantity??0);
         const totalAvailable = Math.max(0,totalOnHand-reservedByOtherOrders);
-        if (totalAvailable + 1e-9 < line.quantity) throw new Error('المخزون المتاح بعد حجوزات الطلبات غير كافٍ للمنتج: ' + line.product.name);
+        if (totalAvailable + 1e-9 < line.quantity) throw new Error('المخزون غير كافٍ بعد احتساب حجوزات الطلبات للمنتج: ' + line.product.name);
 
         let remaining = line.quantity;
         const allocations: Array<{ batchId: string | null; quantity: number; unitCostMinor: number }> = [];
