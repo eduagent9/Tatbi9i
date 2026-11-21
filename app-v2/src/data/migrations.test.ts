@@ -4,11 +4,12 @@ import { APP_MIGRATIONS } from './sqlite-database';
 describe('append-only distribution migration', () => {
   it('registers migration 010 after the existing nine migrations', () => {
     expect(APP_MIGRATIONS.map(migration => migration.version)).toEqual(
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
     );
     expect(APP_MIGRATIONS[9].name).toBe('distribution_operations');
     expect(APP_MIGRATIONS[10].name).toBe('variant_vehicle_counts');
     expect(APP_MIGRATIONS[11].name).toBe('personal_orders_and_product_images');
+    expect(APP_MIGRATIONS[12].name).toBe('daily_cash_closing');
   });
 
   it('adds product image storage and append-only order reservations', () => {
