@@ -133,8 +133,8 @@ export default function App() {
       if(granted.camera!=='granted')throw new Error('خاصك تسمح للتطبيق باستعمال الكاميرا باش يقرا الباركود.');
       document.body.classList.add('barcode-scanner-active');
       setBarcodeScanning(true);
-      listener=await BarcodeScanner.addListener('barcodeScanned',async event=>{
-        const value=event.barcode.rawValue?.trim();
+      listener=await BarcodeScanner.addListener('barcodesScanned',async event=>{
+        const value=event.barcodes[0]?.rawValue?.trim();
         await listener?.remove();listener=null;
         await BarcodeScanner.stopScan().catch(()=>undefined);
         document.body.classList.remove('barcode-scanner-active');setBarcodeScanning(false);
