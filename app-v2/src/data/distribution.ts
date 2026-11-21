@@ -17,9 +17,9 @@ export interface CustomerAgingRow {
 }
 export interface VehicleDayInput {
   id:string; vehicleId:string; responsibleUserId:string; businessDate:string;
-  openingOdometer?:number|null; openingCashMinor?:number;
+  openingOdometer?:number|null; openingCashMinor?:number; expectedCashMinor?:number;
 }
-export interface VehicleCountInput { productId:string; batchId?:string|null; countedQuantity:number; }
+export interface VehicleCountInput { productId:string; variantId?:string|null; batchId?:string|null; countedQuantity:number; }
 const required=(v:string,label:string)=>{const x=v.trim();if(!x)throw new Error(label+' مطلوب.');return x;};
 const positiveMoney=(v:number,label:string)=>{if(!Number.isSafeInteger(v)||v<=0)throw new RangeError(label+' خاصو يكون مبلغاً صحيحاً موجباً بالسنتيم.');return v;};
 const quantity=(v:number,label:string)=>{if(!Number.isFinite(v)||v<0)throw new RangeError(label+' خاصها تكون كمية صحيحة غير سالبة.');return v;};
