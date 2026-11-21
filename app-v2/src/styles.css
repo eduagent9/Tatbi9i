@@ -80,3 +80,38 @@ body.barcode-scanner-active .barcode-scanner-overlay{visibility:visible!importan
 .section-view[data-active-section="management"] > section[data-section="management"]{display:block}
 .section-view{align-items:start}
 @media(max-width:760px){.main-section-nav button{padding:10px 13px;font-size:12px}}
+
+
+/* Keep the six main sections reachable at the bottom on Android. */
+.main-section-nav{
+  position:fixed;
+  top:auto;
+  bottom:0;
+  inset-inline:0;
+  z-index:1000;
+  display:flex;
+  flex-wrap:nowrap;
+  justify-content:flex-start;
+  gap:7px;
+  width:100%;
+  margin:0;
+  padding:10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  overflow-x:auto;
+  overflow-y:hidden;
+  border:0;
+  border-top:1px solid #dce7e9;
+  border-radius:16px 16px 0 0;
+  background:rgba(255,255,255,.97);
+  box-shadow:0 -5px 22px rgba(23,62,85,.10);
+  scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;
+}
+.main-section-nav::-webkit-scrollbar{display:none}
+.main-section-nav button{flex:1 0 auto;min-width:max-content;padding:11px 14px}
+.app-shell{padding-bottom:calc(104px + env(safe-area-inset-bottom, 0px))}
+footer{position:static;inset:auto;border-top:0;background:transparent;padding:12px}
+@media(max-width:760px){
+  .main-section-nav{padding:8px 8px calc(8px + env(safe-area-inset-bottom, 0px));gap:6px}
+  .main-section-nav button{flex:1 0 auto;min-width:max-content;padding:11px 12px;font-size:12px}
+  .app-shell{padding-bottom:calc(104px + env(safe-area-inset-bottom, 0px))}
+}
