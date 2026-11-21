@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { applyMigrations, type SqliteExecutor, type Migration } from './sqlite-database';
+import { applyMigrations, createSqliteExecutor, type SqliteExecutor, type Migration } from './sqlite-database';
 
 function fakeDb(options: { failSql?: string } = {}) {
   let version = 0;
@@ -22,6 +22,30 @@ function fakeDb(options: { failSql?: string } = {}) {
   };
   return { db, calls, get transaction() { return transaction; }, get version() { return version; } };
 }
+
+describe('SQLite native executor transaction mode', () => {
+  it('disables implicit transactions for statements so explicit transactions are not nested', async () => {
+    const native = {
+      execute: vi.fn(async (_statement: string, _transaction?: boolean) => undefined),
+      query: vi.fn(async (_statement: string, _values?: unknown[]) => ({ values: [] })),
+      run: vi.fn(async (_statement: string, _values?: unknown[], _transaction?: boolean) => undefined),
+      beginTransaction: vi.fn(async () => undefined),
+      commitTransaction: vi.fn(async () => undefined),
+      rollbackTransaction: vi.fn(async () => undefined),
+    };
+    const db = createSqliteExecutor(native);
+
+    await db.beginTransaction();
+    await db.execute('CREATE TABLE example (id TEXT);');
+    await db.run('INSERT INTO example (id) VALUES (?);', ['one']);
+    await db.commitTransaction();
+
+    expect(native.beginTransaction).toHaveBeenCalledOnce();
+    expect(native.execute).toHaveBeenCalledWith('CREATE TABLE example (id TEXT);', false);
+    expect(native.run).toHaveBeenCalledWith('INSERT INTO example (id) VALUES (?);', ['one'], false);
+    expect(native.commitTransaction).toHaveBeenCalledOnce();
+  });
+});
 
 describe('SQLite migration runner', () => {
   it('applies ordered migrations and records each version', async () => {
