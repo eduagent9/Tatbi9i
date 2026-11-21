@@ -60,6 +60,7 @@ export class DistributionRepository {
           const o=order.values?.[0];
           if(!o||String(o.customer_id)!==stop.customerId||!['ready','partially_delivered'].includes(String(o.status)))throw new Error('الطلب المرتبط بالمحطة غير جاهز أو لا يخص هذا الزبون.');
           if(o.assigned_vehicle_id&&String(o.assigned_vehicle_id)!==vehicleId)throw new Error('الطلب معيّن لسيارة توصيل أخرى.');
+          if(!o.assigned_vehicle_id)await this.db.run("UPDATE sales_orders SET assigned_vehicle_id=?,updated_at=? WHERE id=? AND assigned_vehicle_id IS NULL",[vehicleId,timestamp,stop.orderId]);
         }
         await this.db.run('INSERT INTO delivery_route_stops (id,route_id,stop_order,customer_id,order_id,status,planned_at) VALUES (?,?,?,?,?,?,?)',[stop.id,id,stop.stopOrder,stop.customerId,stop.orderId??null,'pending',stop.plannedAt??null]);
       }
