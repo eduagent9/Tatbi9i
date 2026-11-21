@@ -7,14 +7,15 @@ import {DistributionRepository,type CustomerAgingRow,type SupplierAccountRow} fr
 type User={id:string;display_name:string;role:AppRole;is_active:number};
 type Vehicle={id:string;code:string;label:string;vehicle_type:'van_sales'|'delivery';assigned_user_id:string|null;assigned_name?:string|null};
 type Customer={id:string;name:string};
+type Product={id:string;name:string;purchase_cost_minor:number};
 type RouteRow={id:string;route_code:string;name:string;planned_date:string;vehicle_label:string;driver_user_id:string;driver_name:string;status:'planned'|'started'|'completed'|'cancelled';stop_count:number};
 type StopRow={id:string;route_id:string;stop_order:number;customer_id:string;customer_name:string;order_id:string|null;status:string;failure_reason:string|null};
 type VehicleStockRow={product_id:string;product_name:string;variant_id:string|null;variant_name:string|null;batch_id:string|null;batch_code:string|null;quantity:number};
-type Props={user:User;users:User[];vehicles:Vehicle[];customers:Customer[]};
+type Props={user:User;users:User[];vehicles:Vehicle[];customers:Customer[];products:Product[]};
 
 const statusLabel:Record<string,string>={planned:'مخططة',started:'جارية',completed:'مكتملة',cancelled:'ملغاة',pending:'في الانتظار',arrived:'وصل',partially_delivered:'تسليم جزئي',delivered:'تم التسليم',failed:'تعذر التسليم',skipped:'تم تجاوزها'};
 
-export function DistributionOperationsPanel({user,users,vehicles,customers}:Props){
+export function DistributionOperationsPanel({user,users,vehicles,customers,products}:Props){
  const [routes,setRoutes]=useState<RouteRow[]>([]);
  const [stops,setStops]=useState<StopRow[]>([]);
  const [accounts,setAccounts]=useState<SupplierAccountRow[]>([]);
@@ -27,6 +28,11 @@ export function DistributionOperationsPanel({user,users,vehicles,customers}:Prop
  const [supplierId,setSupplierId]=useState('');
  const [supplierAmount,setSupplierAmount]=useState('');
  const [supplierMethod,setSupplierMethod]=useState<'cash'|'bank'|'other'>('cash');
+ const [returnSupplierId,setReturnSupplierId]=useState('');
+ const [returnProductId,setReturnProductId]=useState('');
+ const [returnQuantity,setReturnQuantity]=useState('1');
+ const [returnUnitCost,setReturnUnitCost]=useState('');
+ const [returnReason,setReturnReason]=useState('');
  const [recipient,setRecipient]=useState<Record<string,string>>({});
  const [failure,setFailure]=useState<Record<string,string>>({});
  const [counts,setCounts]=useState<VehicleStockRow[]>([]);
@@ -101,6 +107,13 @@ export function DistributionOperationsPanel({user,users,vehicles,customers}:Prop
   await new DistributionRepository(db).recordSupplierPayment({id:crypto.randomUUID(),supplierId,amountMinor:amount,method:supplierMethod,paidBy:user.id});
   setSupplierAmount('');
  }
+ async function submitSupplierReturn(){
+  if(!canManage)throw new Error('ما عندكش صلاحية إرجاع السلع للمورد.');
+  const db=await openAppDatabase();
+  const result=await new DistributionRepository(db).createSupplierReturn({id:crypto.randomUUID(),supplierId:returnSupplierId,reason:returnReason,processedBy:user.id,lines:[{productId:returnProductId,quantity:Number(returnQuantity),unitCostMinor:madToMinorUnits(Number(returnUnitCost))}]});
+  setReturnQuantity('1');setReturnReason('');
+  setNotice('تسجل إرجاع المورد بقيمة '+formatMad(result.totalMinor)+' وتخصم المخزون.');
+ }
  async function saveLimit(customerId:string){
   if(user.role!=='owner')throw new Error('تغيير سقف الدين من صلاحية المالك فقط.');
   const limit=madToMinorUnits(Number(creditLimits[customerId]??'0'));
@@ -150,6 +163,14 @@ export function DistributionOperationsPanel({user,users,vehicles,customers}:Prop
     <label>المورد<select required value={supplierId} onChange={e=>setSupplierId(e.target.value)}><option value="">اختار المورد</option>{accounts.filter(a=>a.balance_minor>0).map(a=><option key={a.supplier_id} value={a.supplier_id}>{a.supplier_name} · {formatMad(a.balance_minor)}</option>)}</select></label>
     <div className="two-cols"><label>المبلغ (DH)<input required type="number" min="0.01" step="0.01" value={supplierAmount} onChange={e=>setSupplierAmount(e.target.value)}/></label><label>طريقة الأداء<select value={supplierMethod} onChange={e=>setSupplierMethod(e.target.value as typeof supplierMethod)}><option value="cash">نقداً</option><option value="bank">تحويل بنكي</option><option value="other">أخرى</option></select></label></div>
     <button className="primary-button" disabled={busy||!supplierId}>تسجيل أداء المورد</button>
+   </form>
+   <div className="section-divider"></div><h4>إرجاع سلعة للمورد</h4>
+   <form onSubmit={e=>{e.preventDefault();void action(submitSupplierReturn,'تسجل إرجاع السلعة للمورد وتخصم من مخزون الديبو.');}}>
+    <label>المورد<select required value={returnSupplierId} onChange={e=>setReturnSupplierId(e.target.value)}><option value="">اختار المورد</option>{accounts.map(a=><option key={a.supplier_id} value={a.supplier_id}>{a.supplier_name}</option>)}</select></label>
+    <label>المنتج<select required value={returnProductId} onChange={e=>{setReturnProductId(e.target.value);const p=products.find(x=>x.id===e.target.value);setReturnUnitCost(((p?.purchase_cost_minor??0)/100).toFixed(2));}}><option value="">اختار المنتج</option>{products.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+    <div className="two-cols"><label>الكمية<input type="number" min="0.01" step="0.01" required value={returnQuantity} onChange={e=>setReturnQuantity(e.target.value)}/></label><label>تكلفة الوحدة (DH)<input type="number" min="0" step="0.01" required value={returnUnitCost} onChange={e=>setReturnUnitCost(e.target.value)}/></label></div>
+    <label>سبب الإرجاع<input required value={returnReason} onChange={e=>setReturnReason(e.target.value)} placeholder="تالف، خطأ في التوريد..."/></label>
+    <button className="primary-button" disabled={busy||!returnSupplierId||!returnProductId}>تأكيد إرجاع المورد</button>
    </form>
   </div>}
   {user.role==='owner'&&<div className="distribution-subpanel"><h4>سقف الدين حسب الزبون</h4>
