@@ -718,7 +718,7 @@ export default function App() {
   return (
     <main className="app-shell" dir="rtl">
       <header className="topbar"><div><span className="brand-mark">ت</span><div><p className="eyebrow">إدارة التوزيع والمبيعات</p><h1>تطبيقي</h1></div></div><div className="topbar-actions">{currentUser&&<><span className="mode-tag">{currentUser.display_name} · {roleLabels[currentUser.role]}</span><button type="button" className="secondary-button" onClick={logoutUser}>خروج</button></>}<span className="mode-tag">نسخة تطوير</span></div></header>
-      <section className="page-heading"><div><p className="eyebrow">المخزون</p><h2>المنتجات</h2><p>سجل المنتجات والأسعار والباركود ووحدات البيع</p></div><div className="total-card"><strong>{products.length}</strong><span>منتج مسجل</span></div></section>
+      <section className="page-heading"><div><p className="eyebrow">تدبير شركة التوزيع</p><h2>{currentUser?.role==='owner'?({home:'الرئيسية',sales:'المبيعات',inventory:'المخزون',purchases:'المشتريات',relations:'العلاقات',management:'الإدارة'} as const)[activeSection]:'مساحة العمل'}</h2><p>{currentUser?.role==='owner'?'كل عمليات الشركة ومؤشراتها في مكان واحد':'مرحبا بك في مساحة العمل الخاصة بدورك'}</p></div><div className="total-card"><strong>{products.length}</strong><span>منتج مسجل</span></div></section>
       {loading && <div className="message">كنوجد قاعدة البيانات...</div>}
       {!loading && error && <div className="message error" role="alert">{error}<small>المعاينة فالمتصفح ما كتخزنش البيانات؛ افتح تطبيق Android المبني باش تجرب SQLite.</small></div>}
       {notice && <div className="message success" role="status">{notice}</div>}
@@ -819,7 +819,24 @@ export default function App() {
       </div>}
       {currentUser?.role==='owner'&&repository&&<nav className="main-section-nav" aria-label="الأقسام الرئيسية">{([{id:'home',label:'الرئيسية'},{id:'sales',label:'المبيعات'},{id:'inventory',label:'المخزون'},{id:'purchases',label:'المشتريات'},{id:'relations',label:'العلاقات'},{id:'management',label:'الإدارة'}] as const).map(item=><button type="button" key={item.id} className={activeSection===item.id?'active':''} aria-current={activeSection===item.id?'page':undefined} onClick={()=>setActiveSection(item.id)}>{item.label}</button>)}</nav>}
       {currentUser?.role==='owner'&&repository && <div className="content-grid section-view" data-active-section={activeSection}>
-        <section id="home-section" data-section="home" className="panel team-panel">
+        <section data-section="home" className="dashboard-overview">
+          <div className="dashboard-welcome"><div><p className="eyebrow">نظرة عامة</p><h3>مرحبا {currentUser.display_name}</h3><p>ها ملخص النشاط ديال الشركة، وتقدر تمشي مباشرة لأي عملية.</p></div><span className="dashboard-date">{new Date().toLocaleDateString('ar-MA',{weekday:'long',day:'numeric',month:'long'})}</span></div>
+          <div className="dashboard-metrics">
+            <article><span>المبيعات الصافية</span><strong>{formatMad(financialSummary?.salesMinor??0)}</strong><small>منذ بداية الاستخدام</small></article>
+            <article><span>صافي الربح التقديري</span><strong>{formatSignedMad(financialSummary?.netProfitMinor??0)}</strong><small>بعد مصاريف التشغيل</small></article>
+            <article><span>الديون المستحقة</span><strong>{formatMad(financialSummary?.outstandingMinor??0)}</strong><small>{outstandingInvoices.length} فاتورة فيها باقي</small></article>
+            <article><span>المنتجات المسجلة</span><strong>{products.length}</strong><small>{products.filter(product=>product.low_stock_threshold>0&&product.total_stock<=product.low_stock_threshold).length} منتجات تحت حد التنبيه</small></article>
+          </div>
+          <div className="dashboard-shortcuts"><div className="panel-heading"><div><h3>اختصارات سريعة</h3><p>وصل مباشرة للخدمة اللي محتاج</p></div></div><div className="shortcut-grid">
+            <button type="button" onClick={()=>setActiveSection('sales')}><b>＋</b><span>بيع جديد</span></button>
+            <button type="button" onClick={()=>setActiveSection('inventory')}><b>▦</b><span>إدارة المخزون</span></button>
+            <button type="button" onClick={()=>setActiveSection('purchases')}><b>⇩</b><span>تسجيل توريد</span></button>
+            <button type="button" onClick={()=>setActiveSection('relations')}><b>♙</b><span>الزبناء والديون</span></button>
+            <button type="button" onClick={()=>setActiveSection('management')}><b>▤</b><span>التقارير والإدارة</span></button>
+          </div></div>
+          <div className="dashboard-bottom"><article><strong>الطلبات المفتوحة</strong><b>{distributionOrders.filter(order=>!['delivered','cancelled'].includes(order.status)).length}</b><span>طلبات تحتاج متابعة</span></article><article><strong>تنبيهات الصلاحية</strong><b>{expiryAlerts.length}</b><span>دفعات مسجلة بتاريخ صلاحية</span></article><article><strong>فواتير مؤكدة</strong><b>{financialSummary?.invoiceCount??0}</b><span>إجمالي الفواتير</span></article></div>
+        </section>
+        <section data-section="sales" className="panel team-panel">
           <div className="panel-heading"><div><h3>طلبات المحلات</h3><p>مندوب الطلبات يسجل طلب الزبون، والديبو يتابع التحضير والتجهيز</p></div><span className="step-mark">01</span></div>
           <form onSubmit={submitDistributionOrder}>
             <label>المحل / الزبون<select required value={orderCustomerId} onChange={e=>setOrderCustomerId(e.target.value)}><option value="">اختار المحل</option>{customers.map(customer=><option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
