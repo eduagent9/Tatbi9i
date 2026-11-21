@@ -82,6 +82,7 @@ export default function App() {
   const [saleCollected, setSaleCollected] = useState('');
   const [lastInvoice, setLastInvoice] = useState<null | {number:string;date:string;customer:string;phone:string|null;city:string|null;seller:string;lines:Array<{name:string;quantity:number;unitPrice:number;total:number}>;subtotal:number;discount:number;total:number;collected:number;due:number}>(null);
   const [form, setForm] = useState(emptyForm);
+  const [editingProductId,setEditingProductId]=useState<string|null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -717,13 +718,12 @@ export default function App() {
     if (!repository) return;
     setError(''); setNotice(''); setSaving(true);
     try {
-      await repository.create({
-        id: crypto.randomUUID(), name: form.name, category: form.category, subcategory: form.subcategory,
-        baseUnit: form.unit, piecesPerCarton: form.unit === 'carton' ? Number(form.pieces) : null,
-        purchaseCostMinor: madToMinorUnits(Number(form.cost)), salePriceMinor: madToMinorUnits(Number(form.price)),
-        lowStockThreshold: Number(form.threshold), barcode: form.barcode,
-      });
-      await refresh(repository); setForm(emptyForm); setNotice('تسجل المنتج بنجاح.');
+      const input={id:editingProductId??crypto.randomUUID(),name:form.name,category:form.category,subcategory:form.subcategory,
+        baseUnit:form.unit,piecesPerCarton:form.unit==='carton'?Number(form.pieces):null,
+        purchaseCostMinor:madToMinorUnits(Number(form.cost)),salePriceMinor:madToMinorUnits(Number(form.price)),
+        lowStockThreshold:Number(form.threshold),barcode:form.barcode};
+      if(editingProductId)await repository.update(input);else await repository.create(input);
+      await refresh(repository);setForm(emptyForm);setEditingProductId(null);setNotice(editingProductId?'تحدّث المنتج بلا ما تبدل تاريخ الفواتير أو المخزون.':'تسجل المنتج بنجاح.');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر حفظ المنتج.'); }
     finally { setSaving(false); }
   }
@@ -899,12 +899,12 @@ export default function App() {
             <div className="two-cols"><label>وحدة البيع<select value={form.unit} onChange={e => setForm({...form,unit:e.target.value as 'piece'|'carton'})}><option value="piece">قطعة</option><option value="carton">كرتونة</option></select></label>{form.unit === 'carton' && <label>القطع في الكرتونة<input type="number" min="1" step="1" required value={form.pieces} onChange={e => setForm({...form,pieces:e.target.value})} /></label>}</div>
             <div className="two-cols"><label>ثمن الشراء (DH)<input type="number" min="0" step="0.01" required value={form.cost} onChange={e => setForm({...form,cost:e.target.value})} placeholder="0.00" /></label><label>ثمن البيع (DH)<input type="number" min="0" step="0.01" required value={form.price} onChange={e => setForm({...form,price:e.target.value})} placeholder="0.00" /></label></div>
             <div className="two-cols"><label>حد التنبيه للمخزون<input type="number" min="0" step="0.01" value={form.threshold} onChange={e => setForm({...form,threshold:e.target.value})} /></label><label>الباركود<input value={form.barcode} onChange={e => setForm({...form,barcode:e.target.value})} placeholder="اختياري" /></label></div><button type="button" className="secondary-button barcode-scan-trigger" disabled={saving||barcodeScanning} onClick={()=>scanProductBarcode('product')}>مسح الباركود بالكاميرا</button>
-            <button className="primary-button" disabled={saving}>{saving ? 'كيتم الحفظ...' : 'حفظ المنتج'}</button>
+            <button className="primary-button" disabled={saving}>{saving ? 'كيتم الحفظ...' : editingProductId?'حفظ التعديلات':'حفظ المنتج'}</button>
           </form>
         </section>
         <section data-section="inventory" className="panel list-panel"><div className="panel-heading"><div><h3>لائحة المنتجات</h3><p>المخزون الحالي مجموع المستودع والسيارات</p></div><span className="step-mark">02</span></div>
           <input className="search-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="قلب بالاسم أو الصنف أو الباركود..." />
-          {visibleProducts.length === 0 ? <div className="empty-state"><span>📦</span><strong>ما كاين حتى منتج دابا</strong><p>بدا بإضافة أول منتج من الاستمارة.</p></div> : <div className="product-list">{visibleProducts.map(product => <article className="product-row" key={product.id}><div className="product-icon">▦</div><div className="product-info"><strong>{product.name}</strong><span>{product.category || 'بدون صنف'}{product.barcode ? ` · ${product.barcode}` : ''}</span></div><div className="product-numbers"><strong>{formatMad(product.sale_price_minor)}</strong><span>المخزون: {product.total_stock}</span></div></article>)}</div>}
+          {visibleProducts.length === 0 ? <div className="empty-state"><span>📦</span><strong>ما كاين حتى منتج دابا</strong><p>بدا بإضافة أول منتج من الاستمارة.</p></div> : <div className="product-list">{visibleProducts.map(product => <article className="product-row" key={product.id}><div className="product-icon">▦</div><div className="product-info"><strong>{product.name}</strong><span>{product.category || 'بدون صنف'}{product.barcode ? ` · ${product.barcode}` : ''}</span></div><div className="product-numbers"><strong>{formatMad(product.sale_price_minor)}</strong><span>المخزون: {product.total_stock}</span><button type="button" className="secondary-button" onClick={()=>{if(!requirePermission('manage_products'))return;setEditingProductId(product.id);setForm({name:product.name,category:product.category??'مواد غذائية',subcategory:product.subcategory??'',unit:product.base_unit==='carton'?'carton':'piece',pieces:String(product.pieces_per_carton??12),cost:(product.purchase_cost_minor/100).toFixed(2),price:(product.sale_price_minor/100).toFixed(2),threshold:String(product.low_stock_threshold),barcode:product.barcode??''});setActiveSection('inventory');}}>تعديل</button></div></article>)}</div>}
         </section>
         <StockAndReturnsPanel />
         <DataBackupPanel />
