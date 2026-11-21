@@ -90,6 +90,7 @@ export default function App() {
   const [stockDirection, setStockDirection] = useState<'in' | 'out'>('in');
   const [stockOutType, setStockOutType] = useState<'delivery' | 'damage' | 'supplier_return'>('delivery');
   const [barcodeScanning,setBarcodeScanning]=useState(false);
+  const [activeSection,setActiveSection]=useState<'home'|'sales'|'inventory'|'purchases'|'relations'|'management'>('home');
 
   const refresh = useCallback(async (repo: ProductRepository) => setProducts(await repo.list()), []);
   useEffect(() => {
@@ -733,8 +734,8 @@ export default function App() {
 
       {!loading&&!currentUser&&authMode==='setup'&&<section className="panel auth-panel"><div className="panel-heading"><div><h3>إعداد دخول المالك</h3><p>أول مرة خاصك تختار رمز PIN خاص بالمالك. غادي يتخزن كـ hash مملح، ماشي كنص واضح.</p></div></div><form onSubmit={setupOwnerPin}><label>رمز PIN (4 إلى 8 أرقام)<input type="password" inputMode="numeric" autoComplete="new-password" maxLength={8} required value={setupPin} onChange={e=>setSetupPin(e.target.value)} /></label><label>تأكيد رمز PIN<input type="password" inputMode="numeric" autoComplete="new-password" maxLength={8} required value={setupPinConfirm} onChange={e=>setSetupPinConfirm(e.target.value)} /></label><button className="primary-button" disabled={saving}>{saving?'كيتم الإعداد...':'حفظ رمز المالك والدخول'}</button></form></section>}
       {!loading&&!currentUser&&authMode==='login'&&<section className="panel auth-panel"><div className="panel-heading"><div><h3>تسجيل الدخول</h3><p>اختار المستخدم ودخل رمز PIN ديالو.</p></div></div><form onSubmit={loginUser}><label>المستخدم<select required value={authUserId} onChange={e=>setAuthUserId(e.target.value)}>{authUsers.filter(user=>user.is_active===1&&user.pin_hash&&user.pin_salt).map(user=><option key={user.id} value={user.id}>{user.display_name} · {roleLabels[user.role]}</option>)}</select></label><label>رمز PIN<input type="password" inputMode="numeric" autoComplete="current-password" maxLength={8} required value={authPin} onChange={e=>setAuthPin(e.target.value)} /></label><button className="primary-button" disabled={saving}>{saving?'كيتم التحقق...':'دخول'}</button></form></section>}
-      {currentUser?.role==='order_rep'&&repository&&<div className="content-grid">
-        <section className="panel team-panel">
+      {currentUser?.role==='order_rep'&&repository&&<div className="content-grid section-view" data-active-section={activeSection}>
+        <section data-section="management" className="panel team-panel">
           <div className="panel-heading"><div><h3>تسجيل طلب محل</h3><p>سجل الكميات المطلوبة من المحل وأرسلها للديبو للتحضير</p></div><span className="step-mark">طلب جديد</span></div>
           <form onSubmit={submitDistributionOrder}>
             <label>المحل / الزبون<select required value={orderCustomerId} onChange={e=>setOrderCustomerId(e.target.value)}><option value="">اختار المحل</option>{customers.map(customer=><option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
@@ -768,14 +769,14 @@ export default function App() {
             <button className="primary-button" disabled={saving||customers.length===0||products.length===0}>تأكيد البيع من المستودع</button>
           </form>
         </section>
-        <section className="panel collection-panel"><div className="panel-heading"><div><h3>تحصيل ديون الزبناء</h3><p>تسجيل أداء لاحق على فاتورة سابقة</p></div></div>
+        <section data-section="sales" className="panel collection-panel"><div className="panel-heading"><div><h3>تحصيل ديون الزبناء</h3><p>تسجيل أداء لاحق على فاتورة سابقة</p></div></div>
           <form onSubmit={submitCollection}>
             <label>الفاتورة المستحقة<select required value={collectionInvoiceId} onChange={e=>setCollectionInvoiceId(e.target.value)}><option value="">اختار الفاتورة</option>{outstandingInvoices.map(invoice=><option key={invoice.invoiceId} value={invoice.invoiceId}>{invoice.invoiceNumber} · {invoice.customerName} · باقي {formatMad(invoice.dueMinor)}</option>)}</select></label>
             <label>المبلغ المستخلص (DH)<input type="number" min="0.01" step="0.01" required value={collectionAmount} onChange={e=>setCollectionAmount(e.target.value)}/></label>
             <button className="primary-button" disabled={saving||outstandingInvoices.length===0}>تأكيد تحصيل الدين</button>
           </form>
         </section>
-        <section className="panel stock-panel"><div className="panel-heading"><div><h3>المخزون والتنبيهات</h3><p>مراقبة المنتجات والكميات المنخفضة</p></div></div>
+        <section data-section="inventory" className="panel stock-panel"><div className="panel-heading"><div><h3>المخزون والتنبيهات</h3><p>مراقبة المنتجات والكميات المنخفضة</p></div></div>
           {products.length===0?<p className="hint">مازال ما تسجلوش المنتجات.</p>:products.map(product=><article className="alert-row" key={product.id}><div><strong>{product.name}</strong><span>حد التنبيه: {product.low_stock_threshold}</span></div><strong>{product.total_stock} متوفر</strong></article>)}
         </section>
       </div>}
@@ -816,9 +817,9 @@ export default function App() {
           </form>
         </section>
       </div>}
-      {currentUser?.role==='owner'&&repository&&<nav className="main-section-nav" aria-label="الأقسام الرئيسية"><a href="#home-section">الرئيسية</a><a href="#sales-section">المبيعات</a><a href="#inventory-section">المخزون</a><a href="#purchases-section">المشتريات</a><a href="#relations-section">العلاقات</a><a href="#management-section">الإدارة</a></nav>}
+      {currentUser?.role==='owner'&&repository&&<nav className="main-section-nav" aria-label="الأقسام الرئيسية">{([{id:'home',label:'الرئيسية'},{id:'sales',label:'المبيعات'},{id:'inventory',label:'المخزون'},{id:'purchases',label:'المشتريات'},{id:'relations',label:'العلاقات'},{id:'management',label:'الإدارة'}] as const).map(item=><button type="button" key={item.id} className={activeSection===item.id?'active':''} aria-current={activeSection===item.id?'page':undefined} onClick={()=>setActiveSection(item.id)}>{item.label}</button>)}</nav>}
       {currentUser?.role==='owner'&&repository && <div className="content-grid">
-        <section id="home-section" className="panel team-panel">
+        <section id="home-section" data-section="home" className="panel team-panel">
           <div className="panel-heading"><div><h3>طلبات المحلات</h3><p>مندوب الطلبات يسجل طلب الزبون، والديبو يتابع التحضير والتجهيز</p></div><span className="step-mark">01</span></div>
           <form onSubmit={submitDistributionOrder}>
             <label>المحل / الزبون<select required value={orderCustomerId} onChange={e=>setOrderCustomerId(e.target.value)}><option value="">اختار المحل</option>{customers.map(customer=><option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
@@ -861,7 +862,7 @@ export default function App() {
           </div>
           <p className="hint">هاد الجزء كيسجل الفريق وتعيين السيارات فقط؛ تسجيل الدخول وفرض الصلاحيات على العمليات مازال خاصهم يتكملو قبل الاستعمال الحقيقي.</p>
         </section>
-        <section id="inventory-section" className="panel form-panel"><div className="panel-heading"><div><h3>إضافة منتج</h3><p>المبالغ بالدرهم المغربي</p></div><span className="step-mark">01</span></div>
+        <section id="inventory-section" data-section="inventory" className="panel form-panel"><div className="panel-heading"><div><h3>إضافة منتج</h3><p>المبالغ بالدرهم المغربي</p></div><span className="step-mark">01</span></div>
           <form onSubmit={submit}>
             <label>اسم المنتج<input required value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder="مثال: ماء معدني 1.5L" /></label>
             <div className="two-cols"><label>الصنف<select value={form.category} onChange={e => setForm({...form,category:e.target.value})}><option>مواد غذائية</option><option>مشروبات</option><option>مواد التنظيف</option><option>العناية والتجميل</option><option>مواد منزلية</option><option>متنوعات</option></select></label><label>الصنف الفرعي<input value={form.subcategory} onChange={e => setForm({...form,subcategory:e.target.value})} placeholder="اختياري" /></label></div>
@@ -871,7 +872,7 @@ export default function App() {
             <button className="primary-button" disabled={saving}>{saving ? 'كيتم الحفظ...' : 'حفظ المنتج'}</button>
           </form>
         </section>
-        <section className="panel list-panel"><div className="panel-heading"><div><h3>لائحة المنتجات</h3><p>المخزون الحالي مجموع المستودع والسيارات</p></div><span className="step-mark">02</span></div>
+        <section data-section="inventory" className="panel list-panel"><div className="panel-heading"><div><h3>لائحة المنتجات</h3><p>المخزون الحالي مجموع المستودع والسيارات</p></div><span className="step-mark">02</span></div>
           <input className="search-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="قلب بالاسم أو الصنف أو الباركود..." />
           {visibleProducts.length === 0 ? <div className="empty-state"><span>📦</span><strong>ما كاين حتى منتج دابا</strong><p>بدا بإضافة أول منتج من الاستمارة.</p></div> : <div className="product-list">{visibleProducts.map(product => <article className="product-row" key={product.id}><div className="product-icon">▦</div><div className="product-info"><strong>{product.name}</strong><span>{product.category || 'بدون صنف'}{product.barcode ? ` · ${product.barcode}` : ''}</span></div><div className="product-numbers"><strong>{formatMad(product.sale_price_minor)}</strong><span>المخزون: {product.total_stock}</span></div></article>)}</div>}
         </section>
@@ -886,7 +887,7 @@ export default function App() {
           </form>
           <p className="hint">أي إخراج بكمية أكبر من المخزون المتوفر غادي يترفض. كل حركة كتتسجل مع تحديث الرصيد داخل نفس المعاملة.</p>
         </section>
-        <section id="relations-section" className="panel customer-panel"><div className="panel-heading"><div><h3>الزبناء والديون</h3><p>الدين محسوب مباشرة من الفواتير المؤكدة</p></div><span className="step-mark">04</span></div>
+        <section id="relations-section" data-section="relations" className="panel customer-panel"><div className="panel-heading"><div><h3>الزبناء والديون</h3><p>الدين محسوب مباشرة من الفواتير المؤكدة</p></div><span className="step-mark">04</span></div>
           <form onSubmit={submitCustomer}>
             <label>اسم الزبون<input required value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="اسم المحل أو الزبون" /></label>
             <div className="two-cols"><label>الهاتف<input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="اختياري" /></label><label>المدينة<input value={customerCity} onChange={e => setCustomerCity(e.target.value)} placeholder="مثلاً برشيد" /></label></div>
@@ -894,13 +895,13 @@ export default function App() {
           </form>
           <div className="customer-list">{customers.length === 0 ? <p className="hint">مازال ما تسجل حتى زبون.</p> : customers.map(customer => <article className="customer-row" key={customer.id}><div><strong>{customer.name}</strong><span>{customer.phone || customer.city || 'بدون معلومات إضافية'}</span></div><div><strong>{formatMad(customer.debt_minor)}</strong><span>الدين · {customer.invoice_count} فاتورة</span></div></article>)}</div>
         </section>
-        <section className="panel movement-panel"><div className="panel-heading"><div><h3>سجل حركة المخزون</h3><p>آخر الحركات المسجلة بالتاريخ والوجهة</p></div><span className="step-mark">11</span></div>
+        <section data-section="inventory" className="panel movement-panel"><div className="panel-heading"><div><h3>سجل حركة المخزون</h3><p>آخر الحركات المسجلة بالتاريخ والوجهة</p></div><span className="step-mark">11</span></div>
           {movementHistory.length===0 ? <p className="hint">مازال ما تسجلات حتى حركة.</p> : <div className="movement-list">{movementHistory.map(movement=><article className="movement-row" key={movement.id}>
             <div><strong>{movement.product_name}</strong><span>{movement.movement_type==='purchase_receipt'?'توريد':movement.movement_type==='sale'?'بيع':movement.movement_type==='delivery'?'توزيع':movement.movement_type==='damage'?'تالف':movement.movement_type==='supplier_return'?'إرجاع للمورد':movement.movement_type==='stock_count'?'جرد':'حركة مخزون'} · {new Date(movement.occurred_at).toLocaleString('ar-MA')}</span><small>{movement.from_label ? 'من '+movement.from_label : ''}{movement.to_label ? ' ← '+movement.to_label : ''}{movement.note ? ' · '+movement.note : ''}</small></div>
             <strong>{movement.quantity}</strong>
           </article>)}</div>}
         </section>
-        <section id="management-section" className="panel finance-panel"><div className="panel-heading"><div><h3>ملخص الحسابات</h3><p>إجمالي الفواتير المؤكدة منذ بداية الاستخدام</p></div><span className="step-mark">09</span></div>
+        <section id="management-section" data-section="management" className="panel finance-panel"><div className="panel-heading"><div><h3>ملخص الحسابات</h3><p>إجمالي الفواتير المؤكدة منذ بداية الاستخدام</p></div><span className="step-mark">09</span></div>
           {financialSummary ? <div className="finance-grid">
             <article><span>المبيعات الصافية</span><strong>{formatMad(financialSummary.salesMinor)}</strong></article>
             <article><span>تكلفة البضاعة المباعة</span><strong>{formatMad(financialSummary.costMinor)}</strong></article>
@@ -911,7 +912,7 @@ export default function App() {
           </div> : <p className="hint">الملخص المالي غير متوفر حالياً.</p>}
           <p className="hint">الربح كيراعي المرتجعات القابلة للبيع في تكلفة البضاعة، وكيطرح مصاريف التشغيل المسجلة. المرتجعات التالفة أو المنتهية كتبقى محسوبة ضمن التكلفة، والضرائب والمصاريف غير المسجلة ما داخلاش.</p>
         </section>
-        <section className="panel expense-panel"><div className="panel-heading"><div><h3>مصاريف التشغيل</h3><p>سجل النقل والوقود والكراء والمصاريف الأخرى</p></div><span className="step-mark">10</span></div>
+        <section data-section="management" className="panel expense-panel"><div className="panel-heading"><div><h3>مصاريف التشغيل</h3><p>سجل النقل والوقود والكراء والمصاريف الأخرى</p></div><span className="step-mark">10</span></div>
           <form onSubmit={submitExpense}>
             <label>تصنيف المصروف<select value={expenseCategory} onChange={e => setExpenseCategory(e.target.value)}><option>نقل</option><option>وقود</option><option>كراء</option><option>أجور</option><option>صيانة</option><option>اتصالات</option><option>مصاريف أخرى</option></select></label>
             <label>المبلغ (DH)<input type="number" min="0.01" step="0.01" required value={expenseAmount} onChange={e => setExpenseAmount(e.target.value)} placeholder="0.00" /></label>
@@ -919,7 +920,7 @@ export default function App() {
             <button className="primary-button" disabled={saving}>{saving ? 'كيتسجل المصروف...' : 'حفظ المصروف'}</button>
           </form>
         </section>
-        <section className="panel alerts-panel"><div className="panel-heading"><div><h3>تنبيهات المخزون والصلاحية</h3><p>مراقبة النقص والدفعات اللي قربات تسالي</p></div><span className="step-mark">08</span></div>
+        <section data-section="inventory" className="panel alerts-panel"><div className="panel-heading"><div><h3>تنبيهات المخزون والصلاحية</h3><p>مراقبة النقص والدفعات اللي قربات تسالي</p></div><span className="step-mark">08</span></div>
           <div className="alert-group"><h4>مخزون منخفض</h4>
             {products.filter(product => product.low_stock_threshold > 0 && product.total_stock <= product.low_stock_threshold).length === 0
               ? <p className="hint">ما كاين حتى منتج تحت حد التنبيه.</p>
@@ -933,7 +934,7 @@ export default function App() {
             })}
           </div>
         </section>
-        <section id="purchases-section" className="panel supplier-panel"><div className="panel-heading"><div><h3>الموردون والتوريدات</h3><p>إضافة مورد وتسجيل وصولات الشراء مع الصلاحية</p></div><span className="step-mark">07</span></div>
+        <section id="purchases-section" data-section="purchases" className="panel supplier-panel"><div className="panel-heading"><div><h3>الموردون والتوريدات</h3><p>إضافة مورد وتسجيل وصولات الشراء مع الصلاحية</p></div><span className="step-mark">07</span></div>
           <form onSubmit={submitSupplier}>
             <label>اسم المورد<input required value={supplierName} onChange={e => setSupplierName(e.target.value)} placeholder="اسم الشركة أو الموزع" /></label>
             <label>الهاتف<input value={supplierPhone} onChange={e => setSupplierPhone(e.target.value)} placeholder="اختياري" /></label>
@@ -962,7 +963,7 @@ export default function App() {
           </form>
           {outstandingInvoices.length === 0 ? <p className="hint">ما كايناش فواتير جديدة فيها دين مستحق.</p> : <p className="hint">الفواتير القديمة غير المؤكدة ما كتدخلش فهاد اللائحة. ما يمكنش تحصيل مبلغ أكبر من الدين المتبقي.</p>}
         </section>
-        <section id="sales-section" className="panel sales-panel"><div className="panel-heading"><div><h3>فاتورة بيع جديدة</h3><p>فاتورة متعددة المنتجات مع تخفيض وأداء جزئي</p></div><span className="step-mark">05</span></div>
+        <section id="sales-section" data-section="sales" className="panel sales-panel"><div className="panel-heading"><div><h3>فاتورة بيع جديدة</h3><p>فاتورة متعددة المنتجات مع تخفيض وأداء جزئي</p></div><span className="step-mark">05</span></div>
           <form onSubmit={submitSale}>
             <label>الزبون<select required value={saleCustomerId} onChange={e => setSaleCustomerId(e.target.value)}><option value="">اختار الزبون</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
             {saleLines.map((line,index)=><div className="sale-line" key={index}>
