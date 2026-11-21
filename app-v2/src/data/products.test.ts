@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { SqliteExecutor } from './sqlite-database';
 import { ProductRepository } from './products';
 
-function fakeDb(failOnBarcode = false) {
+function fakeDb(failOnBarcode = false, stockQuantity = 0) {
   const db: SqliteExecutor = {
     execute: vi.fn(async () => undefined),
-    query: vi.fn(async () => ({ values: [{ id: 'p1', name: 'ماء', total_stock: 12, barcode: '6110001' }] })),
+    query: vi.fn(async (sql: string) => sql.includes('SUM(quantity)') ? ({ values: [{ quantity: stockQuantity }] }) : ({ values: [{ id: 'p1', name: 'ماء', total_stock: 12, barcode: '6110001' }] })),
     run: vi.fn(async (sql: string) => { if (failOnBarcode && sql.includes('INSERT INTO barcodes')) throw new Error('barcode exists'); }),
     beginTransaction: vi.fn(async () => undefined),
     commitTransaction: vi.fn(async () => undefined),
@@ -62,6 +62,13 @@ describe('ProductRepository', () => {
     expect(db.run).toHaveBeenCalledWith(expect.stringContaining('UPDATE products SET is_active=0'),expect.any(Array));
     expect(db.run).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO audit_events'),expect.arrayContaining(['product.archived']));
     expect(db.commitTransaction).toHaveBeenCalledOnce();
+  });
+
+  it('refuses to archive a product that still has stock',async()=>{
+    const db=fakeDb(false,5),repo=new ProductRepository(db);
+    await expect(repo.archive('p1','owner')).rejects.toThrow('ما يمكنش أرشفة');
+    expect(db.rollbackTransaction).toHaveBeenCalledOnce();
+    expect(db.commitTransaction).not.toHaveBeenCalled();
   });
 
 });
