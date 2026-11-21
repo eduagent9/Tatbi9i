@@ -765,8 +765,9 @@ export default function App() {
           </form>
         </section>
       </div>}
+      {currentUser?.role==='owner'&&repository&&<nav className="main-section-nav" aria-label="الأقسام الرئيسية"><a href="#home-section">الرئيسية</a><a href="#sales-section">المبيعات</a><a href="#inventory-section">المخزون</a><a href="#purchases-section">المشتريات</a><a href="#relations-section">العلاقات</a><a href="#management-section">الإدارة</a></nav>}
       {currentUser?.role==='owner'&&repository && <div className="content-grid">
-        <section className="panel team-panel">
+        <section id="home-section" className="panel team-panel">
           <div className="panel-heading"><div><h3>طلبات المحلات</h3><p>مندوب الطلبات يسجل طلب الزبون، والديبو يتابع التحضير والتجهيز</p></div><span className="step-mark">01</span></div>
           <form onSubmit={submitDistributionOrder}>
             <label>المحل / الزبون<select required value={orderCustomerId} onChange={e=>setOrderCustomerId(e.target.value)}><option value="">اختار المحل</option>{customers.map(customer=><option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
@@ -809,7 +810,7 @@ export default function App() {
           </div>
           <p className="hint">هاد الجزء كيسجل الفريق وتعيين السيارات فقط؛ تسجيل الدخول وفرض الصلاحيات على العمليات مازال خاصهم يتكملو قبل الاستعمال الحقيقي.</p>
         </section>
-        <section className="panel form-panel"><div className="panel-heading"><div><h3>إضافة منتج</h3><p>المبالغ بالدرهم المغربي</p></div><span className="step-mark">01</span></div>
+        <section id="inventory-section" className="panel form-panel"><div className="panel-heading"><div><h3>إضافة منتج</h3><p>المبالغ بالدرهم المغربي</p></div><span className="step-mark">01</span></div>
           <form onSubmit={submit}>
             <label>اسم المنتج<input required value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder="مثال: ماء معدني 1.5L" /></label>
             <div className="two-cols"><label>الصنف<select value={form.category} onChange={e => setForm({...form,category:e.target.value})}><option>مواد غذائية</option><option>مشروبات</option><option>مواد التنظيف</option><option>العناية والتجميل</option><option>مواد منزلية</option><option>متنوعات</option></select></label><label>الصنف الفرعي<input value={form.subcategory} onChange={e => setForm({...form,subcategory:e.target.value})} placeholder="اختياري" /></label></div>
@@ -834,7 +835,7 @@ export default function App() {
           </form>
           <p className="hint">أي إخراج بكمية أكبر من المخزون المتوفر غادي يترفض. كل حركة كتتسجل مع تحديث الرصيد داخل نفس المعاملة.</p>
         </section>
-        <section className="panel customer-panel"><div className="panel-heading"><div><h3>الزبناء والديون</h3><p>الدين محسوب مباشرة من الفواتير المؤكدة</p></div><span className="step-mark">04</span></div>
+        <section id="relations-section" className="panel customer-panel"><div className="panel-heading"><div><h3>الزبناء والديون</h3><p>الدين محسوب مباشرة من الفواتير المؤكدة</p></div><span className="step-mark">04</span></div>
           <form onSubmit={submitCustomer}>
             <label>اسم الزبون<input required value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="اسم المحل أو الزبون" /></label>
             <div className="two-cols"><label>الهاتف<input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="اختياري" /></label><label>المدينة<input value={customerCity} onChange={e => setCustomerCity(e.target.value)} placeholder="مثلاً برشيد" /></label></div>
@@ -848,7 +849,7 @@ export default function App() {
             <strong>{movement.quantity}</strong>
           </article>)}</div>}
         </section>
-        <section className="panel finance-panel"><div className="panel-heading"><div><h3>ملخص الحسابات</h3><p>إجمالي الفواتير المؤكدة منذ بداية الاستخدام</p></div><span className="step-mark">09</span></div>
+        <section id="management-section" className="panel finance-panel"><div className="panel-heading"><div><h3>ملخص الحسابات</h3><p>إجمالي الفواتير المؤكدة منذ بداية الاستخدام</p></div><span className="step-mark">09</span></div>
           {financialSummary ? <div className="finance-grid">
             <article><span>المبيعات الصافية</span><strong>{formatMad(financialSummary.salesMinor)}</strong></article>
             <article><span>تكلفة البضاعة المباعة</span><strong>{formatMad(financialSummary.costMinor)}</strong></article>
@@ -881,7 +882,7 @@ export default function App() {
             })}
           </div>
         </section>
-        <section className="panel supplier-panel"><div className="panel-heading"><div><h3>الموردون والتوريدات</h3><p>إضافة مورد وتسجيل وصولات الشراء مع الصلاحية</p></div><span className="step-mark">07</span></div>
+        <section id="purchases-section" className="panel supplier-panel"><div className="panel-heading"><div><h3>الموردون والتوريدات</h3><p>إضافة مورد وتسجيل وصولات الشراء مع الصلاحية</p></div><span className="step-mark">07</span></div>
           <form onSubmit={submitSupplier}>
             <label>اسم المورد<input required value={supplierName} onChange={e => setSupplierName(e.target.value)} placeholder="اسم الشركة أو الموزع" /></label>
             <label>الهاتف<input value={supplierPhone} onChange={e => setSupplierPhone(e.target.value)} placeholder="اختياري" /></label>
@@ -910,7 +911,7 @@ export default function App() {
           </form>
           {outstandingInvoices.length === 0 ? <p className="hint">ما كايناش فواتير جديدة فيها دين مستحق.</p> : <p className="hint">الفواتير القديمة غير المؤكدة ما كتدخلش فهاد اللائحة. ما يمكنش تحصيل مبلغ أكبر من الدين المتبقي.</p>}
         </section>
-        <section className="panel sales-panel"><div className="panel-heading"><div><h3>فاتورة بيع جديدة</h3><p>فاتورة متعددة المنتجات مع تخفيض وأداء جزئي</p></div><span className="step-mark">05</span></div>
+        <section id="sales-section" className="panel sales-panel"><div className="panel-heading"><div><h3>فاتورة بيع جديدة</h3><p>فاتورة متعددة المنتجات مع تخفيض وأداء جزئي</p></div><span className="step-mark">05</span></div>
           <form onSubmit={submitSale}>
             <label>الزبون<select required value={saleCustomerId} onChange={e => setSaleCustomerId(e.target.value)}><option value="">اختار الزبون</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
             {saleLines.map((line,index)=><div className="sale-line" key={index}>
