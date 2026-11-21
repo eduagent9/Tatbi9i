@@ -18,7 +18,7 @@ export function InvoiceArchivePanel({onSelect}:{onSelect:(invoice:PrintableInvoi
   const result=await db.query(`SELECT i.id,i.invoice_number,i.created_at,c.name AS customer_name,c.phone,c.city,u.display_name AS seller_name,
    i.subtotal_minor,i.offer_discount_minor AS discount_minor,i.total_minor,i.collected_minor
    FROM invoices i JOIN customers c ON c.id=i.customer_id JOIN users u ON u.id=i.seller_user_id
-   WHERE i.status NOT IN ('voided') AND (i.invoice_number LIKE ? ESCAPE '\\' OR c.name LIKE ? ESCAPE '\\' OR COALESCE(c.phone,'') LIKE ? ESCAPE '\\')
+   WHERE i.confirmed_at IS NOT NULL AND i.status NOT IN ('voided') AND (i.invoice_number LIKE ? ESCAPE '\\' OR c.name LIKE ? ESCAPE '\\' OR COALESCE(c.phone,'') LIKE ? ESCAPE '\\')
    ORDER BY COALESCE(i.confirmed_at,i.created_at) DESC LIMIT 100`,[term,term,term]);
   setRows((result.values??[]) as unknown as InvoiceRow[]);
  },[search]);
