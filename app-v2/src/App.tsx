@@ -925,7 +925,7 @@ export default function App() {
           <form onSubmit={submitCustomer}>
             <label>اسم الزبون<input required value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="اسم المحل أو الزبون" /></label>
             <div className="two-cols"><label>الهاتف<input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="اختياري" /></label><label>المدينة<input value={customerCity} onChange={e => setCustomerCity(e.target.value)} placeholder="مثلاً برشيد" /></label></div>
-            <button className="primary-button" disabled={saving}>{saving ? 'كيتم الحفظ...' : 'إضافة الزبون'}</button>
+            <button className="primary-button" disabled={saving}>{saving?'كيتم الحفظ...':editingCustomerId?'حفظ تعديل الزبون':'إضافة الزبون'}</button>{editingCustomerId&&<button type="button" className="secondary-button" onClick={()=>{setEditingCustomerId(null);setCustomerName('');setCustomerPhone('');setCustomerCity('');}}>إلغاء التعديل</button>}
           </form>
           <div className="customer-list">{customers.length === 0 ? <p className="hint">مازال ما تسجل حتى زبون.</p> : customers.map(customer => <article className="customer-row" key={customer.id}><div><strong>{customer.name}</strong><span>{customer.phone || customer.city || 'بدون معلومات إضافية'}</span></div><div><strong>{formatMad(customer.debt_minor)}</strong><span>الدين · {customer.invoice_count} فاتورة</span></div><button type="button" className="secondary-button" onClick={()=>{if(!requirePermission('manage_customers'))return;setEditingCustomerId(customer.id);setCustomerName(customer.name);setCustomerPhone(customer.phone??'');setCustomerCity(customer.city??'');setActiveSection('relations');}}>تعديل</button></article>)}</div>
         </section>
@@ -972,7 +972,7 @@ export default function App() {
           <form onSubmit={submitSupplier}>
             <label>اسم المورد<input required value={supplierName} onChange={e => setSupplierName(e.target.value)} placeholder="اسم الشركة أو الموزع" /></label>
             <label>الهاتف<input value={supplierPhone} onChange={e => setSupplierPhone(e.target.value)} placeholder="اختياري" /></label>
-            <button className="secondary-button" disabled={saving}>{saving ? 'كيتم الحفظ...' : 'إضافة المورد'}</button>
+            <button className="secondary-button" disabled={saving}>{saving?'كيتم الحفظ...':editingSupplierId?'حفظ تعديل المورد':'إضافة المورد'}</button>{editingSupplierId&&<button type="button" className="secondary-button" onClick={()=>{setEditingSupplierId(null);setSupplierName('');setSupplierPhone('');}}>إلغاء التعديل</button>}
           </form>
           <div className="supplier-list">{suppliers.map(supplier => <article className="customer-row" key={supplier.id}><div><strong>{supplier.name}</strong><span>{supplier.phone || 'بدون هاتف'}</span></div><div><strong>{formatMad(supplier.purchased_minor)}</strong><span>{supplier.receipt_count} وصل شراء</span></div><button type="button" className="secondary-button" onClick={()=>{if(!requirePermission('manage_purchases'))return;setEditingSupplierId(supplier.id);setSupplierName(supplier.name);setSupplierPhone(supplier.phone??'');setActiveSection('purchases');}}>تعديل</button></article>)}</div>
           <div className="section-divider"></div>
