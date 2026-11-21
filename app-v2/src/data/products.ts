@@ -77,6 +77,39 @@ export class ProductRepository {
     }
   }
 
+  /** Updates catalog fields and barcode atomically without touching stock or historical invoice snapshots. */
+  async update(input: ProductInput): Promise<void> {
+    const id=requiredText(input.id,'معرّف المنتج'),name=requiredText(input.name,'اسم المنتج');
+    const unit=input.baseUnit??'piece',pieces=input.piecesPerCarton??null;
+    const cost=nonNegative(input.purchaseCostMinor,'ثمن الشراء'),price=nonNegative(input.salePriceMinor,'ثمن البيع');
+    const threshold=nonNegative(input.lowStockThreshold??0,'حد التنبيه');
+    if(unit==='carton'&&(!Number.isSafeInteger(pieces)||(pieces??0)<=0))throw new RangeError('عدد القطع في الكرتونة خاصو يكون صحيح وموجب.');
+    if(unit==='piece'&&pieces!==null)throw new Error('عدد القطع في الكرتونة ما كيلزمش لوحدة القطعة.');
+    const barcode=input.barcode?.trim()||null,timestamp=this.now();
+    await this.db.beginTransaction();
+    try{
+      const current=await this.db.query('SELECT id FROM products WHERE id=? AND is_active=1',[id]);
+      if(!current.values?.length)throw new Error('المنتج غير موجود أو مؤرشف.');
+      await this.db.run('UPDATE products SET name=?,category=?,subcategory=?,base_unit=?,pieces_per_carton=?,purchase_cost_minor=?,sale_price_minor=?,low_stock_threshold=?,updated_at=? WHERE id=?',
+        [name,input.category?.trim()||null,input.subcategory?.trim()||null,unit,pieces,cost,price,threshold,timestamp,id]);
+      await this.db.run('DELETE FROM barcodes WHERE product_id=?',[id]);
+      if(barcode)await this.db.run('INSERT INTO barcodes (id,product_id,barcode,unit,units_per_scan) VALUES (?,?,?,?,?)',[id+':barcode',id,barcode,unit,unit==='carton'?pieces:1]);
+      await this.db.run('INSERT INTO audit_events (id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?)',[crypto.randomUUID(),'product.updated','product',id,JSON.stringify({name,category:input.category??null,subcategory:input.subcategory??null,unit,pieces,cost,price,threshold,barcode}),timestamp]);
+      await this.db.commitTransaction();
+    }catch(error){await this.db.rollbackTransaction().catch(()=>undefined);throw error;}
+  }
+
+  async archive(id:string,actorId:string):Promise<void>{
+    const timestamp=this.now();await this.db.beginTransaction();
+    try{
+      const found=await this.db.query('SELECT id FROM products WHERE id=? AND is_active=1',[requiredText(id,'معرّف المنتج')]);
+      if(!found.values?.length)throw new Error('المنتج غير موجود أو مؤرشف.');
+      await this.db.run('UPDATE products SET is_active=0,updated_at=? WHERE id=?',[timestamp,id]);
+      await this.db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,occurred_at) VALUES (?,?,?,?,?,?)',[crypto.randomUUID(),actorId,'product.archived','product',id,timestamp]);
+      await this.db.commitTransaction();
+    }catch(error){await this.db.rollbackTransaction().catch(()=>undefined);throw error;}
+  }
+
   async list(): Promise<ProductRecord[]> {
     const result = await this.db.query(
       `SELECT p.id,p.name,p.category,p.subcategory,p.base_unit,p.pieces_per_carton,
