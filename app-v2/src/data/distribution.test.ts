@@ -48,8 +48,8 @@ describe('DistributionRepository',()=>{
   const db=makeDb(sql=>{
    if(sql.includes('SELECT id FROM suppliers'))return [{id:'s1'}];
    if(sql.includes('SELECT id,total_minor FROM purchase_receipts'))return [{id:'pr1',total_minor:10000}];
-   if(sql.includes('SUM(amount_minor) AS amount FROM supplier_payments'))return [{amount:3000}];
-   if(sql.includes('SUM(total_minor) AS amount FROM supplier_returns'))return [{amount:1000}];
+   if(sql.includes('FROM supplier_payments WHERE purchase_receipt_id'))return [{amount:3000}];
+   if(sql.includes('FROM supplier_returns WHERE purchase_receipt_id'))return [{amount:1000}];
    return [];
   });
   const repo=new DistributionRepository(db,()=> '2026-11-21T10:00:00.000Z',()=> 'generated');
