@@ -151,13 +151,17 @@ footer{position:static;margin-top:22px}
 .personal-mode .team-panel{display:none!important}
 .personal-orders-panel{grid-column:1/-1}
 .personal-product-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}
-.personal-product-card{min-width:0;overflow:hidden;border:1px solid #e3eaed;border-radius:15px;background:#fff;display:flex;flex-direction:column}
-.personal-product-image{width:100%;aspect-ratio:1/1;background:#f2f6f7;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.personal-product-card{min-width:0;overflow:hidden;border:1px solid #e3eaed;border-radius:15px;background:#fff;display:flex;flex-direction:column;aspect-ratio:.58;box-shadow:0 5px 18px #203c4a0b}
+.personal-product-image{position:relative;flex:1;min-height:0;width:100%;background:#f2f6f7;overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:zoom-in}
 .personal-product-image img{width:100%;height:100%;object-fit:cover;display:block}
 .personal-product-placeholder{color:#93a5ac;font-size:12px}
-.personal-product-info{padding:10px;display:grid;gap:7px}
-.personal-product-info strong{font-size:13px;color:#294b5a;line-height:1.4}
-.personal-product-info>span{font-size:12px;color:#6f858e}
+.personal-product-info{height:26px;flex:0 0 26px;min-width:0;padding:3px 6px;display:flex;align-items:center;justify-content:space-between;gap:5px;background:#fff}
+.personal-product-info strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:#294b5a;line-height:1.2}
+.personal-product-info>span{flex:0 0 auto;font-size:10px;color:#6f858e;white-space:nowrap}
+.personal-product-quantity{position:absolute;inset-inline:7px;bottom:7px;display:grid;grid-template-columns:34px minmax(0,1fr) 34px;gap:5px;padding:5px;border:1px solid #ffffffa8;border-radius:13px;background:#ffffffed;box-shadow:0 4px 16px #142b3a30;backdrop-filter:blur(8px)}
+.personal-product-quantity button{border:0;border-radius:9px;background:#173e55;color:#fff;font-size:18px;font-weight:700;min-height:34px;cursor:pointer}
+.personal-product-quantity button:disabled{opacity:.35}
+.personal-product-quantity input{min-width:0;width:100%;min-height:34px;padding:4px;text-align:center;border:0;background:transparent;color:#173e55;font-weight:700}
 .personal-product-actions{display:grid;grid-template-columns:1fr 42px;gap:6px}
 .personal-product-actions input{min-width:0;width:100%}
 .personal-order-total{display:flex;justify-content:space-between;align-items:center;padding:12px;border-radius:12px;background:#edf5f4}
