@@ -15,3 +15,13 @@
 13. Legacy JSON validation flags malformed collections, duplicate IDs, and unresolved payment/return invoice references without changing source data.
 
 These are acceptance requirements, not claims that all tests have passed. Migration 010 currently supplies database structures for route stops, delivery proof metadata, vehicle-day settlement, customer credit limits, supplier payments, and supplier returns; UI workflows and transaction services for those new structures remain release requirements.
+
+
+## Phase 2 field workflow additions
+
+14. Product photos are stored in the existing `products.image_local_uri` column and shown in image-first product cards; field selectors must keep the image as the dominant card area.
+15. Delivery proof may include recipient name, touch signature, and a captured photo; the proof record must be tied to the assigned driver and active route stop.
+16. Arabic, French, and English can be selected; the current language pack translates the main navigation, role labels, and shared shell. Full translation of every workflow label is still a release task.
+17. Backup/restore includes SQLite data, including locally stored product photos and delivery evidence. Backups are unencrypted JSON and must be stored securely.
+18. Cross-device synchronization is not enabled. A server endpoint, authenticated device identity, durable outbox, retry/backoff, idempotency keys, conflict rules, and security review are required before enabling it. Do not point devices at a shared database file or claim sync from local backup/export.
+19. Physical Android verification is mandatory for camera/gallery permissions, signature touch handling, large-photo storage, restore/reopen, print-to-PDF, and offline operation. CI build success is not a substitute for a real-device test.
