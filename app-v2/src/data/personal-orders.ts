@@ -123,18 +123,23 @@ export class PersonalOrdersRepository {
       const remainingDiscount=Math.max(0,Number(order.offer_discount_minor)-Number(invoiced.values?.[0]?.discount??0));
       const isFinal=selected.every(({line,quantity})=>quantity>=Number(line.remaining_quantity)-1e-9)&&orderLines.every(line=>selected.some(item=>item.line.id===line.id)||Number(line.remaining_quantity)<=1e-9);
       const discount=isFinal?remainingDiscount:Math.min(remainingDiscount,Math.round(remainingDiscount*gross/Math.max(1,remainingGross)));
+      const reservationLocations=await Promise.all(selected.map(async({line})=>{
+        const result=await this.db.query("SELECT location_id FROM sales_order_reservations WHERE order_line_id=? AND status='active'",[line.id]);
+        const location=String(result.values?.[0]?.location_id??'');
+        if(!location)throw new Error('حجز المخزون غير موجود لهذا السطر.');
+        return location;
+      }));
+      const deliveryLocationId=reservationLocations[0];
+      if(reservationLocations.some(location=>location!==deliveryLocationId))throw new Error('موقع المخزون مختلف بين أسطر الطلب؛ راجع الحجوزات قبل التسليم.');
       const sale=await new SalesRepository(this.db,this.now,this.makeId).create({
         id:input.invoiceId,invoiceNumber:input.invoiceNumber,customerId:String(order.customer_id),sellerUserId:ownerId,
-        locationId:deliveryLocationId??'loc-depot-main',orderId,lines:selected.map(item=>({productId:item.line.product_id,variantId:item.line.variant_id,quantity:item.quantity,unitPriceMinor:Number(item.line.unit_price_minor)})),
+        locationId:deliveryLocationId,orderId,lines:selected.map(item=>({productId:item.line.product_id,variantId:item.line.variant_id,quantity:item.quantity,unitPriceMinor:Number(item.line.unit_price_minor)})),
         discountMinor:discount,collectedMinor:collected,paymentMethod:input.paymentMethod??'cash',note:'تأكيد تسليم الطلب '+input.orderId,
       },'external');
-      let deliveryLocationId:string|null=null;
       for(const item of selected){
         const reservation=await this.db.query("SELECT id,quantity,fulfilled_quantity,location_id FROM sales_order_reservations WHERE order_line_id=? AND status='active'",[item.line.id]);
         const row=reservation.values?.[0];if(!row)throw new Error('حجز المخزون غير موجود لهذا السطر.');
-        const reservedLocation=String(row.location_id??'');
-        if(!reservedLocation||(deliveryLocationId&&deliveryLocationId!==reservedLocation))throw new Error('موقع المخزون مختلف بين أسطر الطلب؛ راجع الحجوزات قبل التسليم.');
-        deliveryLocationId=reservedLocation;
+        if(String(row.location_id??'')!==deliveryLocationId)throw new Error('تغير موقع حجز المخزون أثناء التسليم؛ ألغ العملية وراجع الطلب.');
         const fulfilled=Number(row.fulfilled_quantity)+item.quantity,quantity=Number(row.quantity);
         if(fulfilled>quantity+1e-9)throw new Error('كمية التسليم تجاوزت الحجز.');
         await this.db.run("UPDATE sales_order_reservations SET fulfilled_quantity=?,status=?,updated_at=? WHERE id=?",[fulfilled,fulfilled>=quantity-1e-9?'consumed':'active',timestamp,row.id]);
