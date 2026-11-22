@@ -51,7 +51,7 @@ export function StockAndReturnsPanel(){
  }
  async function loadTransferOptions(connection:SqliteExecutor){
   const [loc,bal]=await Promise.all([
-   connection.query('SELECT id,label FROM stock_locations WHERE is_active=1 AND location_type='depot' ORDER BY label'),
+   connection.query(`SELECT id,label FROM stock_locations WHERE is_active=1 AND location_type='depot' ORDER BY label`),
    connection.query(`SELECT sb.id AS balance_id,sb.product_id,p.name AS product_name,sb.variant_id,v.variant_name,
     sb.batch_id,pb.batch_code,sb.location_id,sl.label AS location_label,sb.quantity
     FROM stock_balances sb JOIN products p ON p.id=sb.product_id
