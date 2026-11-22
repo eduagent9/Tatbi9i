@@ -73,7 +73,6 @@ body.barcode-scanner-active .barcode-scanner-overlay{visibility:visible!importan
 .main-section-nav button.active{background:#176b68;color:#fff;border-color:#176b68}
 .section-view[data-active-section] > section{display:none}
 .section-view[data-active-section="home"] > section[data-section="home"],
-.section-view[data-active-section="catalog"] > section[data-section="catalog"],
 .section-view[data-active-section="sales"] > section[data-section="sales"],
 .section-view[data-active-section="inventory"] > section[data-section="inventory"],
 .section-view[data-active-section="distribution"] > section[data-section="distribution"],
@@ -130,11 +129,13 @@ footer{position:static;inset:auto;border-top:0;background:transparent;padding:12
 .dashboard-bottom{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.dashboard-bottom article b{font-size:22px;color:#245f5b}
 .section-view>[data-section="home"]{grid-column:1/-1}
 .main-section-nav{position:fixed;top:auto;bottom:0;inset-inline:0;z-index:1000;display:flex;flex-wrap:nowrap;justify-content:flex-start;gap:7px;width:100%;margin:0;padding:9px 10px calc(9px + env(safe-area-inset-bottom,0px));overflow-x:auto;overflow-y:hidden;border:0;border-top:1px solid #dce7e9;border-radius:16px 16px 0 0;background:rgba(255,255,255,.97);box-shadow:0 -8px 28px #203c4a14;scrollbar-width:none}
-.main-section-nav button{flex:1 0 auto;min-width:76px;border:1px solid #dce7e9;border-radius:12px;background:#f7faf9;color:#315f66;padding:11px 14px;font:inherit;font-size:12px;font-weight:700;white-space:nowrap;cursor:pointer}
+ .main-section-nav button{flex:1 0 0;min-width:max-content;display:flex;align-items:center;justify-content:center;gap:7px;border:1px solid #dce7e9;border-radius:12px;background:#f7faf9;color:#315f66;padding:11px 13px;font:inherit;font-size:12px;font-weight:700;white-space:nowrap;cursor:pointer;transition:background .18s ease,color .18s ease,border-color .18s ease}
+.main-section-nav .nav-number{display:grid;place-items:center;width:20px;height:20px;border-radius:7px;background:#e7efef;color:#52727a;font-size:10px;font-weight:800}
+.main-section-nav button.active .nav-number{background:#ffffff30;color:#fff}
 .main-section-nav button.active{background:#176b68;color:#fff;border-color:#176b68}
 .app-shell{padding-bottom:calc(100px + env(safe-area-inset-bottom,0px))}
 footer{position:static;margin-top:22px}
-@media(max-width:760px){.dashboard-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-welcome{align-items:flex-start;flex-direction:column;padding:18px}.shortcut-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.dashboard-bottom{grid-template-columns:1fr}.main-section-nav button{min-width:72px;padding:10px 12px;font-size:11px}.app-shell{padding:14px 12px calc(102px + env(safe-area-inset-bottom,0px))}}
+@media(max-width:760px){.main-section-nav button{padding:10px 12px;font-size:11px}.main-section-nav .nav-number{width:18px;height:18px}.dashboard-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-welcome{align-items:flex-start;flex-direction:column;padding:18px}.shortcut-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.dashboard-bottom{grid-template-columns:1fr}.main-section-nav button{min-width:72px;padding:10px 12px;font-size:11px}.app-shell{padding:14px 12px calc(102px + env(safe-area-inset-bottom,0px))}}
 @media(max-width:380px){.shortcut-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-metrics article{padding:13px}.dashboard-metrics article strong{font-size:16px}}
 
 .distribution-operations{grid-column:1/-1;display:grid;gap:18px}
@@ -147,7 +148,6 @@ footer{position:static;margin-top:22px}
 .credit-limit-row strong{padding-bottom:10px}
 @media(max-width:640px){.distribution-subpanel{padding:14px}.credit-limit-row{grid-template-columns:1fr 1fr}.credit-limit-row strong{grid-column:1/-1}.route-stop{grid-template-columns:1fr}.route-stop>*{grid-column:1/-1}}
 
-.section-view[data-active-section="orders"] > section[data-section="orders"],.section-view[data-active-section="catalog"] > section[data-section="catalog"]{display:block}
 .personal-mode .team-panel{display:none!important}
 .personal-orders-panel{grid-column:1/-1}
 .personal-product-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}
@@ -231,3 +231,16 @@ footer{position:static;margin-top:22px}
 .product-gallery-lightbox .gallery-close{position:absolute;top:18px;inset-inline-end:18px}
 .personal-product-actions{grid-template-columns:34px minmax(0,1fr) 34px}
 .personal-product-image[role=button]{cursor:zoom-in}
+
+/* Clear six-section workspace hierarchy on touch devices. */
+.section-view{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;padding-bottom:12px;touch-action:pan-y}
+.section-view>[data-section]{min-width:0;scroll-margin-top:16px}
+.section-view[data-active-section="sales"]>[data-section="sales"],
+.section-view[data-active-section="inventory"]>[data-section="inventory"],
+.section-view[data-active-section="purchases"]>[data-section="purchases"],
+.section-view[data-active-section="relations"]>[data-section="relations"],
+.section-view[data-active-section="management"]>[data-section="management"],
+.section-view[data-active-section="home"]>[data-section="home"]{display:block}
+.main-section-nav{justify-content:space-between;gap:6px}
+.main-section-nav button{flex:0 0 auto}
+@media(max-width:420px){.main-section-nav{gap:5px;padding-inline:6px}.main-section-nav button{gap:5px;padding:9px 10px;font-size:10px}}
