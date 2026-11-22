@@ -5,7 +5,7 @@ import { ProductRepository } from './products';
 function fakeDb(failOnBarcode = false, stockQuantity = 0) {
   const db: SqliteExecutor = {
     execute: vi.fn(async () => undefined),
-    query: vi.fn(async (sql: string) => (sql.includes('SUM(quantity)') || sql.includes('SUM(sb.quantity)')) ? ({ values: [{ quantity: stockQuantity }] }) : ({ values: [{ id: 'p1', name: 'ماء', total_stock: 12, barcode: '6110001' }] })),
+    query: vi.fn(async (sql: string) => sql.includes('FROM products p') ? ({ values: [{ id: 'p1', name: 'ماء', total_stock: 12, barcode: '6110001' }] }) : (sql.includes('SUM(quantity)') || sql.includes('SUM(sb.quantity)')) ? ({ values: [{ quantity: stockQuantity }] }) : ({ values: [{ id: 'p1', name: 'ماء', total_stock: 12, barcode: '6110001' }] })),
     run: vi.fn(async (sql: string) => { if (failOnBarcode && sql.includes('INSERT INTO barcodes')) throw new Error('barcode exists'); }),
     beginTransaction: vi.fn(async () => undefined),
     commitTransaction: vi.fn(async () => undefined),
