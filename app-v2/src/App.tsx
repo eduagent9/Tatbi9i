@@ -123,7 +123,7 @@ export default function App() {
         db.query("SELECT v.id,v.code,v.label,v.vehicle_type,v.assigned_user_id,u.display_name AS assigned_name FROM vehicles v LEFT JOIN users u ON u.id=v.assigned_user_id WHERE v.is_active=1 ORDER BY v.code")
       ]);
       const loadedUsers=(usersResult.values??[]) as unknown as AuthUser[];
-      setTeamUsers([]);
+      setTeamUsers(loadedUsers);
       setAuthUsers(loadedUsers.filter(user=>user.id==='local-owner'));
       const owner=loadedUsers.find(user=>user.id==='local-owner');
       setAuthMode(owner?.pin_hash&&owner?.pin_salt?'login':'setup');
