@@ -20,6 +20,8 @@ import { InvoiceArchivePanel } from './operations/InvoiceArchivePanel';
 import { ProductCardPicker } from './operations/ProductCardPicker';
 import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
 import {translate,type AppLanguage} from './data/i18n';
+import BrowserPreview from './BrowserPreview';
+import { Capacitor } from '@capacitor/core';
 
 const emptyForm = { name: '', category: 'مواد غذائية', subcategory: '', unit: 'piece' as 'piece' | 'carton', pieces: '12', cost: '', price: '', threshold: '0', barcode: '', imageLocalUri: '' };
 type DistributionOrderRow = { id:string; order_number:string; customer_name:string; created_by_user_id:string; created_by_name:string; assigned_vehicle_id:string|null; vehicle_label:string|null; status:'draft'|'submitted'|'accepted'|'preparing'|'ready'|'partially_delivered'|'delivered'|'cancelled'; total_minor:number; created_at:string };
@@ -101,9 +103,11 @@ export default function App() {
   const [language,setLanguage]=useState<AppLanguage>(()=>{const saved=localStorage.getItem('tatbiqi.language');return saved==='fr'||saved==='en'?saved:'ar';});
   useEffect(()=>{localStorage.setItem('tatbiqi.language',language);document.documentElement.lang=language;document.documentElement.dir=language==='ar'?'rtl':'ltr';},[language]);
   const tr=(key:Parameters<typeof translate>[1])=>translate(language,key);
+  const browserPreview=Capacitor.getPlatform()==='web'&&new URLSearchParams(window.location.search).get('preview')==='1';
 
   const refresh = useCallback(async (repo: ProductRepository) => setProducts(await repo.list()), []);
   useEffect(() => {
+    if(browserPreview){setLoading(false);return;}
     let alive = true;
     openAppDatabase().then(async db => {
       if (!alive) return;
@@ -133,7 +137,7 @@ export default function App() {
     }).catch(reason => { if (alive) setError(reason instanceof Error ? reason.message : 'تعذر فتح قاعدة البيانات.'); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [refresh]);
+  }, [refresh,browserPreview]);
 
   async function scanProductBarcode(target:'product'|'sale'|'purchase'|'stock'|'order'='product',index=0){
     setError('');setNotice('');
@@ -735,6 +739,8 @@ export default function App() {
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'تعذر حفظ المنتج.'); }
     finally { setSaving(false); }
   }
+
+  if(browserPreview)return <BrowserPreview />;
 
   return (
     <main className="app-shell" dir={language==='ar'?'rtl':'ltr'}>
