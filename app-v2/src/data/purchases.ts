@@ -43,7 +43,7 @@ export class PurchaseRepository {
         [id,receiptNumber,supplierId,receivedBy,locationId,totalMinor,input.note?.trim()||null,timestamp,timestamp],
       );
       for(const line of prepared) {
-        const oldStock=await this.db.query('SELECT COALESCE(SUM(sb.quantity),0) AS quantity FROM stock_balances sb JOIN stock_locations sl ON sl.id=sb.location_id WHERE sb.product_id=? AND sl.location_type='depot'',[line.product.id]);
+        const oldStock=await this.db.query(`SELECT COALESCE(SUM(sb.quantity),0) AS quantity FROM stock_balances sb JOIN stock_locations sl ON sl.id=sb.location_id WHERE sb.product_id=? AND sl.location_type='depot'`,[line.product.id]);
         const previousQuantity=Number(oldStock.values?.[0]?.quantity??0);
         const currentProduct=await this.db.query('SELECT purchase_cost_minor FROM products WHERE id=?',[line.product.id]);
         const previousCost=Number(currentProduct.values?.[0]?.purchase_cost_minor??line.product.purchase_cost_minor);
