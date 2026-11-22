@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { formatMad, formatSignedMad, madToMinorUnits } from './data/money';
 import { hashPin, isValidPin, verifyPin } from './data/auth';
 import { canPerform, type AppPermission } from './data/permissions';
-import { canLoadDistributionOrder, canTransitionDistributionOrder } from './data/distribution-workflow';
 import { openAppDatabase } from './data/sqlite-database';
 import { ProductRepository, type ProductRecord } from './data/products';
 import { ProductImagesRepository } from './data/product-images';
@@ -24,46 +23,20 @@ import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning
 
 const MAIN_SECTIONS = ['home','sales','inventory','purchases','relations','management'] as const;
 const emptyForm = { name: '', category: 'مواد غذائية', subcategory: '', unit: 'piece' as 'piece' | 'carton', pieces: '12', cost: '', price: '', threshold: '0', barcode: '' };
-type DistributionOrderRow = { id:string; order_number:string; customer_name:string; created_by_user_id:string; created_by_name:string; assigned_vehicle_id:string|null; vehicle_label:string|null; status:'draft'|'submitted'|'accepted'|'preparing'|'ready'|'partially_delivered'|'delivered'|'cancelled'; total_minor:number; created_at:string };
-type DistributionOrderLine = { id:string; product_id:string; product_name_snapshot:string; variant_id:string|null; quantity:number; unit_price_minor:number; remaining_quantity:number };
-type CashSessionRow = { id:string; user_id:string; user_name:string; vehicle_label:string|null; expected_cash_minor:number; handed_cash_minor:number; counted_cash_minor:number|null; discrepancy_reason:string|null; status:'open'|'submitted'|'reconciled' };
-type TeamUser = { id:string; display_name:string; phone:string|null; role:'owner'|'depot_manager'|'order_rep'|'van_sales'|'delivery_driver'; is_active:number };
-type AuthUser = TeamUser & { pin_salt:string|null; pin_hash:string|null };
-type TeamVehicle = { id:string; code:string; label:string; vehicle_type:'van_sales'|'delivery'; assigned_user_id:string|null; assigned_name:string|null };
-const roleLabels:Record<TeamUser['role'],string>={owner:'المالك',depot_manager:'مسؤول الديبو',order_rep:'مندوب الطلبات',van_sales:'مندوب البيع بالسيارة',delivery_driver:'السائق'};
+type AuthUser = { id:string; display_name:string; phone:string|null; role:'owner'; is_active:number; pin_salt:string|null; pin_hash:string|null };
+const roleLabels:Record<'owner',string>={owner:'المالك'};
 
 export default function App() {
   const [repository, setRepository] = useState<ProductRepository | null>(null);
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [expiryAlerts, setExpiryAlerts] = useState<ExpiryAlertRow[]>([]);
   const [movementHistory, setMovementHistory] = useState<StockMovementRecord[]>([]);
-  const [distributionOrders,setDistributionOrders]=useState<DistributionOrderRow[]>([]);
-  const [orderDeliveryLines,setOrderDeliveryLines]=useState<Record<string,DistributionOrderLine[]>>({});
-  const [deliveryQuantities,setDeliveryQuantities]=useState<Record<string,string>>({});
-  const [cashSessions,setCashSessions]=useState<CashSessionRow[]>([]);
-  const [handoverSessionId,setHandoverSessionId]=useState('');
-  const [handoverReceiverId,setHandoverReceiverId]=useState('');
-  const [handoverAmount,setHandoverAmount]=useState('');
-  const [cashCountedAmounts,setCashCountedAmounts]=useState<Record<string,string>>({});
-  const [cashDiscrepancyReasons,setCashDiscrepancyReasons]=useState<Record<string,string>>({});
-  const [orderCustomerId,setOrderCustomerId]=useState('');
-  const [orderVehicleId,setOrderVehicleId]=useState('');
-  const [deliveryCollectedAmounts,setDeliveryCollectedAmounts]=useState<Record<string,string>>({});
-  const [orderLines,setOrderLines]=useState<Array<{productId:string;quantity:string}>>([{productId:'',quantity:'1'}]);
-  const [teamUsers,setTeamUsers]=useState<TeamUser[]>([]);
   const [authUsers,setAuthUsers]=useState<AuthUser[]>([]);
   const [currentUser,setCurrentUser]=useState<AuthUser|null>(null);
   const [authMode,setAuthMode]=useState<'loading'|'setup'|'login'>('loading');
-  const [authUserId,setAuthUserId]=useState('local-owner');
   const [authPin,setAuthPin]=useState('');
   const [setupPin,setSetupPin]=useState('');
   const [setupPinConfirm,setSetupPinConfirm]=useState('');
-  const [teamPin,setTeamPin]=useState('');
-  const [teamVehicles,setTeamVehicles]=useState<TeamVehicle[]>([]);
-  const [teamName,setTeamName]=useState('');
-  const [teamPhone,setTeamPhone]=useState('');
-  const [teamRole,setTeamRole]=useState<TeamUser['role']>('order_rep');
-  const [assignment,setAssignment]=useState<Record<string,string>>({});
   const [financialSummary, setFinancialSummary] = useState<FinancialSummary | null>(null);
   const [expenseCategory, setExpenseCategory] = useState('نقل');
   const [expenseAmount, setExpenseAmount] = useState('');
@@ -121,9 +94,7 @@ export default function App() {
       // Legacy team/vehicle rows are intentionally left untouched in SQLite.
       const usersResult=await db.query("SELECT id,display_name,phone,role,is_active,pin_salt,pin_hash FROM users WHERE id='local-owner' LIMIT 1");
       const owner=(usersResult.values??[])[0] as unknown as AuthUser|undefined;
-      setTeamUsers([]);
       setAuthUsers(owner?[owner]:[]);
-      setTeamVehicles([]);
       setAuthMode(owner?.pin_hash&&owner?.pin_salt?'login':'setup');
       setAuthUserId('local-owner');
       await refresh(repo);
@@ -139,7 +110,7 @@ export default function App() {
     return () => { alive = false; };
   }, [refresh]);
 
-  async function scanProductBarcode(target:'product'|'sale'|'purchase'|'stock'|'order'='product',index=0){
+  async function scanProductBarcode(target:'product'|'sale'|'purchase'|'stock'='product',index=0){
     setError('');setNotice('');
     let listener:Awaited<ReturnType<typeof BarcodeScanner.addListener>>|null=null;
     try{
@@ -161,7 +132,6 @@ export default function App() {
             if(!productId){setError('هاد الباركود ما مربوط حتى بمنتج مسجل: '+value);return;}
             if(target==='sale')setSaleLines(rows=>rows.map((line,i)=>i===index?{...line,productId:String(productId)}:line));
             if(target==='purchase')setPurchaseLines(rows=>rows.map((line,i)=>i===index?{...line,productId:String(productId)}:line));
-            if(target==='order')setOrderLines(rows=>rows.map((line,i)=>i===index?{...line,productId:String(productId)}:line));
             if(target==='stock')setStockProductId(String(productId));
             setNotice('تلقا المنتج المرتبط بالباركود '+value+' وتختار فالقائمة.');
           }
@@ -200,7 +170,7 @@ export default function App() {
 
   async function loginUser(event:FormEvent<HTMLFormElement>){
     event.preventDefault();
-    const user=authUsers.find(item=>item.id===authUserId&&item.is_active===1);
+    const user=authUsers.find(item=>item.id==='local-owner'&&item.is_active===1);
     if(!user?.pin_hash||!user.pin_salt){setError('هاد المستخدم ما عندوش رمز دخول مضبوط.');return;}
     setError('');setSaving(true);
     try{
@@ -219,313 +189,6 @@ export default function App() {
     }
     return true;
   }
-  async function refreshDistributionOrders(db:Awaited<ReturnType<typeof openAppDatabase>>){
-    const rows=await db.query(`SELECT o.id,o.order_number,c.name AS customer_name,o.created_by AS created_by_user_id,u.display_name AS created_by_name,o.assigned_vehicle_id,v.label AS vehicle_label,o.status,o.total_minor,o.created_at FROM sales_orders o JOIN customers c ON c.id=o.customer_id JOIN users u ON u.id=o.created_by LEFT JOIN vehicles v ON v.id=o.assigned_vehicle_id ORDER BY o.created_at DESC LIMIT 100`);
-    const orders=(rows.values??[]) as unknown as DistributionOrderRow[];
-    const lineEntries=await Promise.all(orders.map(async order=>{
-      const result=await db.query(`SELECT sol.id,sol.product_id,sol.product_name_snapshot,sol.variant_id,sol.quantity,sol.unit_price_minor,
-        MAX(0,sol.quantity-COALESCE((SELECT SUM(il.quantity) FROM invoice_lines il JOIN invoices i ON i.id=il.invoice_id
-          WHERE i.order_id=sol.order_id AND il.product_id=sol.product_id AND il.variant_id IS sol.variant_id AND i.status<>'voided'),0)) AS remaining_quantity
-        FROM sales_order_lines sol WHERE sol.order_id=? ORDER BY sol.rowid`,[order.id]);
-      return [order.id,(result.values??[]) as unknown as DistributionOrderLine[]] as const;
-    }));
-    setDistributionOrders(orders);
-    setOrderDeliveryLines(Object.fromEntries(lineEntries));
-    setDeliveryQuantities(current=>{
-      const next={...current};
-      for(const [orderId,lines] of lineEntries)for(const line of lines){const key=orderId+':'+line.id;next[key]=String(line.remaining_quantity);}
-      return next;
-    });
-  }
-
-  async function refreshCashSessions(db:Awaited<ReturnType<typeof openAppDatabase>>){
-    const result=await db.query(`SELECT cs.id,cs.user_id,u.display_name AS user_name,v.label AS vehicle_label,cs.expected_cash_minor,
-      COALESCE((SELECT SUM(ch.amount_minor) FROM cash_handovers ch WHERE ch.session_id=cs.id),0) AS handed_cash_minor,cs.counted_cash_minor,cs.discrepancy_reason,cs.status
-      FROM cash_sessions cs JOIN users u ON u.id=cs.user_id LEFT JOIN vehicles v ON v.id=cs.vehicle_id
-      ORDER BY cs.opened_at DESC LIMIT 100`);
-    setCashSessions((result.values??[]) as unknown as CashSessionRow[]);
-  }
-
-  async function submitDistributionOrder(event:FormEvent<HTMLFormElement>){
-    if(!requirePermission('create_orders'))return;
-    event.preventDefault();
-    if(!orderCustomerId||!currentUser?.id||orderLines.length===0||orderLines.some(line=>!line.productId||!Number.isFinite(Number(line.quantity))||Number(line.quantity)<=0)){setError('اختار الزبون ومندوب الطلبات والمنتجات والكميات الصحيحة.');return;}
-    if(new Set(orderLines.map(line=>line.productId)).size!==orderLines.length){setError('ما تعاودش نفس المنتج فسطور الطلب؛ جمع الكمية فسطر واحد.');return;}
-    setError('');setNotice('');setSaving(true);
-    try{
-      const db=await openAppDatabase(),now=new Date().toISOString(),id=crypto.randomUUID(),number='CMD-'+Date.now();
-      const prepared=[] as Array<{productId:string;quantity:number;price:number;name:string;unit:string;total:number}>;
-      let subtotal=0;
-      for(const line of orderLines){
-        const found=await db.query('SELECT id,name,base_unit,sale_price_minor FROM products WHERE id=? AND is_active=1',[line.productId]);
-        const product=found.values?.[0];
-        if(!product)throw new Error('كاين منتج غير صالح فالطلب.');
-        const quantity=Number(line.quantity),price=Number(product.sale_price_minor),total=Math.round(quantity*price);
-        if(!Number.isFinite(quantity)||quantity<=0||!Number.isSafeInteger(total))throw new Error('راجع كمية أو ثمن المنتج.');
-        prepared.push({productId:String(product.id),quantity,price,name:String(product.name),unit:String(product.base_unit),total});subtotal+=total;
-      }
-      if(!Number.isSafeInteger(subtotal))throw new Error('مجموع الطلب كبير بزاف.');
-      await db.beginTransaction();
-      try{
-        const customer=await db.query('SELECT id FROM customers WHERE id=? AND is_active=1',[orderCustomerId]);
-        if(!customer.values?.length)throw new Error('الزبون غير موجود أو غير نشيط؛ حدّث اللائحة قبل تسجيل الطلب.');
-        if(orderVehicleId){
-          const vehicle=await db.query("SELECT id FROM vehicles WHERE id=? AND vehicle_type='delivery' AND is_active=1",[orderVehicleId]);
-          if(!vehicle.values?.length)throw new Error('سيارة التوصيل المختارة غير صالحة أو غير نشيطة.');
-        }
-        await db.run('INSERT INTO sales_orders (id,order_number,customer_id,created_by,assigned_vehicle_id,status,subtotal_minor,offer_discount_minor,total_minor,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',[id,number,orderCustomerId,currentUser.id,orderVehicleId||null,'submitted',subtotal,0,subtotal,now,now]);
-        for(const line of prepared)await db.run('INSERT INTO sales_order_lines (id,order_id,product_id,quantity,unit_price_minor,line_total_minor,product_name_snapshot,unit_snapshot) VALUES (?,?,?,?,?,?,?,?)',[crypto.randomUUID(),id,line.productId,line.quantity,line.price,line.total,line.name,line.unit]);
-        await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),currentUser.id,'order.submitted','sales_order',id,JSON.stringify({number,subtotal,lines:prepared.length}),now]);
-      await db.commitTransaction();
-      }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
-      await refreshDistributionOrders(db);setOrderLines([{productId:'',quantity:'1'}]);setNotice('تسجل الطلب '+number+' وتبعث للديبو للتحضير.');
-    }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تسجيل الطلب.');}
-    finally{setSaving(false);}
-  }
-
-  async function loadOrderToVehicle(order:DistributionOrderRow){
-    if(!requirePermission('load_delivery_vehicle'))return;
-    if(!canLoadDistributionOrder(order.status)){setError('ما يمكنش تحميل الطلب حتى يكمل الديبو التحضير ويحوّل حالتو إلى جاهز.');return;}
-    if(!order.assigned_vehicle_id){setError('خاص تعيّن سيارة توصيل للطلب قبل التحميل.');return;}
-    setError('');setNotice('');setSaving(true);
-    try{
-      const db=await openAppDatabase(),now=new Date().toISOString();
-      const lines=await db.query('SELECT product_id,variant_id,quantity,product_name_snapshot FROM sales_order_lines WHERE order_id=? ORDER BY rowid',[order.id]);
-      if(!lines.values?.length)throw new Error('الطلب ما فيه حتى منتج.');
-      await db.beginTransaction();
-      try{
-        const currentOrder=await db.query('SELECT status,assigned_vehicle_id FROM sales_orders WHERE id=?',[order.id]);
-        const currentState=currentOrder.values?.[0];
-        if(!currentState||String(currentState.status)!=='ready')throw new Error('حالة الطلب تبدلات؛ خاصو يبقى جاهز قبل التحميل. حدّث اللائحة وراجع الطلب.');
-        if(String(currentState.assigned_vehicle_id??'')!==order.assigned_vehicle_id)throw new Error('السيارة المعيّنة تبدلات؛ حدّث اللائحة قبل التحميل.');
-        const location=await db.query("SELECT sl.id,v.assigned_user_id,u.role,u.is_active FROM stock_locations sl JOIN vehicles v ON v.id=sl.vehicle_id LEFT JOIN users u ON u.id=v.assigned_user_id WHERE v.id=? AND v.vehicle_type='delivery' AND sl.location_type='vehicle' AND sl.is_active=1 AND v.is_active=1",[order.assigned_vehicle_id]);
-        const destination=location.values?.[0]?.id;
-        const driverId=location.values?.[0]?.assigned_user_id;
-        if(!destination)throw new Error('مخزون سيارة التوصيل مازال ما تخلقش.');
-        if(!driverId||location.values?.[0]?.role!=='delivery_driver'||Number(location.values?.[0]?.is_active)!==1)throw new Error('عيّن سائقاً نشيطاً لسيارة التوصيل قبل التحميل.');
-        const already=await db.query("SELECT id FROM stock_movements WHERE reference_type='sales_order_load' AND reference_id=? LIMIT 1",[order.id]);
-        if(already.values?.length)throw new Error('هاد الطلب سبق تحمّل للسيارة؛ ما يمكنش نعاودو التحميل.');
-        for(const line of lines.values){
-          let remaining=Number(line.quantity);
-          const balances=await db.query("SELECT id,batch_id,quantity FROM stock_balances WHERE product_id=? AND variant_id IS ? AND location_id='loc-depot-main' AND quantity>0 ORDER BY updated_at,id",[line.product_id,line.variant_id??null]);
-          const available=(balances.values??[]).reduce((sum,row)=>sum+Number(row.quantity),0);
-          if(available+1e-9<remaining)throw new Error('المخزون غير كافٍ لتحميل: '+String(line.product_name_snapshot));
-          for(const balance of balances.values??[]){
-            if(remaining<=1e-9)break;
-            const take=Math.min(remaining,Number(balance.quantity));
-            await db.run('UPDATE stock_balances SET quantity=?,updated_at=? WHERE id=?',[Number(balance.quantity)-take,now,balance.id]);
-            const destinationBalance=await db.query('SELECT id,quantity FROM stock_balances WHERE product_id=? AND variant_id IS ? AND location_id=? AND batch_id IS ? LIMIT 1',[line.product_id,line.variant_id??null,destination,balance.batch_id??null]);
-            if(destinationBalance.values?.[0])await db.run('UPDATE stock_balances SET quantity=?,updated_at=? WHERE id=?',[Number(destinationBalance.values[0].quantity)+take,now,destinationBalance.values[0].id]);
-            else await db.run("INSERT INTO stock_balances (id,product_id,variant_id,location_id,batch_id,quantity,updated_at) VALUES (?,?,?,?,?,?,?)",[crypto.randomUUID(),line.product_id,line.variant_id??null,destination,balance.batch_id??null,take,now]);
-            await db.run("INSERT INTO stock_movements (id,product_id,variant_id,batch_id,from_location_id,to_location_id,quantity,movement_type,reference_type,reference_id,performed_by,responsible_user_id,occurred_at,note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",[crypto.randomUUID(),line.product_id,line.variant_id??null,balance.batch_id??null,'loc-depot-main',destination,take,'load_vehicle','sales_order_load',order.id,currentUser?.id??'local-owner',String(driverId),now,'تحميل طلب '+order.order_number+' للسيارة']);
-            remaining-=take;
-          }
-          if(remaining>1e-9)throw new Error('تعذر إكمال تحميل: '+String(line.product_name_snapshot));
-        }
-        await db.run("INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)",[crypto.randomUUID(),currentUser?.id??'local-owner','order.loaded_to_vehicle','sales_order',order.id,JSON.stringify({vehicleId:order.assigned_vehicle_id,driverId:String(driverId),lines:lines.values.length}),now]);
-        await db.commitTransaction();
-      }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
-      await refreshDistributionOrders(db);
-      setNotice('تحمّل الطلب '+order.order_number+' فالسيارة بنجاح، والمخزون تنقل من الديبو للسيارة.');
-    }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تحميل الطلب للسيارة.');}
-    finally{setSaving(false);}
-  }
-
-  async function deliverOrder(order:DistributionOrderRow){
-    if(!requirePermission('deliver_assigned_orders'))return;
-    if(!order.assigned_vehicle_id){setError('الطلب ما عندوش سيارة توصيل.');return;}
-    const orderLinesForDelivery=orderDeliveryLines[order.id]??[];
-    const selected=orderLinesForDelivery.map(line=>({line,quantity:Number(deliveryQuantities[order.id+':'+line.id]??line.remaining_quantity)})).filter(item=>item.quantity>0);
-    if(!selected.length){setError('دخل كمية مسلّمة واحدة على الأقل.');return;}
-    if(selected.some(item=>!Number.isFinite(item.quantity)||item.quantity<=0||item.quantity>item.line.remaining_quantity+1e-9)){
-      setError('راجع الكميات؛ ما يمكنش تسلم أكثر من الكمية المتبقية فالطلب.');return;
-    }
-    setError('');setNotice('');setSaving(true);
-    try{
-      const db=await openAppDatabase();
-      const collectedMinor=madToMinorUnits(Number(deliveryCollectedAmounts[order.id]??'0'));
-      if(!Number.isSafeInteger(collectedMinor)||collectedMinor<0)throw new Error('راجع المبلغ النقدي المستخلص.');
-      if(collectedMinor>0&&!requirePermission('collect_delivery_cash'))throw new Error('ما عندكش صلاحية تسجيل تحصيل نقدي عند التوصيل.');
-      await db.beginTransaction();
-      try{
-        const currentOrder=await db.query('SELECT status,assigned_vehicle_id,customer_id FROM sales_orders WHERE id=?',[order.id]);
-        const orderState=currentOrder.values?.[0];
-        if(!orderState||!['ready','partially_delivered'].includes(String(orderState.status)))throw new Error('حالة الطلب تبدلات؛ حدّث اللائحة قبل التسليم.');
-        if(String(orderState.assigned_vehicle_id??'')!==order.assigned_vehicle_id)throw new Error('السيارة المعيّنة للطلب تبدلات؛ راجع الطلب من جديد.');
-        const location=await db.query("SELECT sl.id,v.assigned_user_id,u.role,u.is_active FROM stock_locations sl JOIN vehicles v ON v.id=sl.vehicle_id LEFT JOIN users u ON u.id=v.assigned_user_id WHERE v.id=? AND v.vehicle_type='delivery' AND sl.location_type='vehicle' AND sl.is_active=1 AND v.is_active=1",[order.assigned_vehicle_id]);
-        const locationId=location.values?.[0]?.id;
-        const driverId=location.values?.[0]?.assigned_user_id;
-        if(!locationId)throw new Error('مخزون سيارة التوصيل غير موجود.');
-        if(!driverId||location.values?.[0]?.role!=='delivery_driver'||Number(location.values?.[0]?.is_active)!==1)throw new Error('عيّن سائقاً نشيطاً لسيارة التوصيل قبل إصدار فاتورة التسليم.');
-        if(currentUser?.role!=='owner'&&driverId!==currentUser?.id)throw new Error('يمكن للسائق تسليم الطلبات المعيّنة ليه فقط.');
-        const customerId=orderState.customer_id;
-        if(!customerId)throw new Error('الزبون المرتبط بالطلب غير موجود.');
-        const loaded=await db.query("SELECT id FROM stock_movements WHERE reference_type='sales_order_load' AND reference_id=? AND to_location_id=? LIMIT 1",[order.id,locationId]);
-        if(!loaded.values?.length)throw new Error('خاصك تحمّل الطلب لهاد السيارة قبل تأكيد التسليم.');
-        const currentLines=await db.query(`SELECT sol.id,MAX(0,sol.quantity-COALESCE((SELECT SUM(il.quantity) FROM invoice_lines il JOIN invoices i ON i.id=il.invoice_id
-          WHERE i.order_id=sol.order_id AND il.product_id=sol.product_id AND il.variant_id IS sol.variant_id AND i.status<>'voided'),0)) AS remaining_quantity
-          FROM sales_order_lines sol WHERE sol.order_id=?`,[order.id]);
-        const currentRemaining=new Map((currentLines.values??[]).map(line=>[String(line.id),Number(line.remaining_quantity)]));
-        if(selected.some(item=>!currentRemaining.has(item.line.id)||item.quantity>Number(currentRemaining.get(item.line.id)??0)+1e-9))throw new Error('الكمية المتبقية تبدلات؛ حدّث الطلب وراجع الكميات قبل التسليم.');
-        const result=await new SalesRepository(db).create({
-          id:crypto.randomUUID(),invoiceNumber:'T-'+Date.now(),customerId:String(customerId),
-          sellerUserId:String(driverId),locationId:String(locationId),vehicleId:order.assigned_vehicle_id,orderId:order.id,
-          lines:selected.map(item=>({productId:item.line.product_id,variantId:item.line.variant_id,quantity:item.quantity,unitPriceMinor:item.line.unit_price_minor})),
-          collectedMinor,paymentMethod:'cash',note:'تحصيل عند تسليم طلب '+order.order_number
-        },'external');
-        const now=new Date().toISOString();
-        const remaining=await db.query(`SELECT COUNT(*) AS pending FROM sales_order_lines sol
-          WHERE sol.order_id=? AND sol.quantity>COALESCE((SELECT SUM(il.quantity) FROM invoice_lines il JOIN invoices i ON i.id=il.invoice_id
-            WHERE i.order_id=sol.order_id AND il.product_id=sol.product_id AND il.variant_id IS sol.variant_id AND i.status<>'voided'),0)+0.000000001`,[order.id]);
-        const nextStatus=Number(remaining.values?.[0]?.pending??0)===0?'delivered':'partially_delivered';
-        if(collectedMinor>0){
-          const activeSession=await db.query("SELECT id FROM cash_sessions WHERE user_id=? AND vehicle_id=? AND status='open' ORDER BY opened_at DESC LIMIT 1",[String(driverId),order.assigned_vehicle_id]);
-          if(activeSession.values?.[0])await db.run('UPDATE cash_sessions SET expected_cash_minor=expected_cash_minor+? WHERE id=?',[collectedMinor,activeSession.values[0].id]);
-          else await db.run("INSERT INTO cash_sessions (id,user_id,vehicle_id,opened_at,opening_cash_minor,expected_cash_minor,status) VALUES (?,?,?,?,0,?,'open')",[crypto.randomUUID(),String(driverId),order.assigned_vehicle_id,now,collectedMinor]);
-        }
-        await db.run("UPDATE sales_orders SET status=?,updated_at=? WHERE id=? AND status IN ('ready','partially_delivered')",[nextStatus,now,order.id]);
-        await db.run("INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)",[crypto.randomUUID(),String(driverId),nextStatus==='delivered'?'order.delivered':'order.partially_delivered','sales_order',order.id,JSON.stringify({invoiceId:result.invoiceId,invoiceNumber:result.invoiceNumber,lines:selected.map(item=>({lineId:item.line.id,quantity:item.quantity})),pendingLines:Number(remaining.values?.[0]?.pending??0)}),now]);
-        await db.commitTransaction();
-        setNotice((nextStatus==='delivered'?'تسلم الطلب كامل. ':'تسجل تسليم جزئي وباقي السلع باقية فالطلب. ')+'الفاتورة '+result.invoiceNumber+'؛ المحصل '+formatMad(result.collectedMinor)+' والباقي على الزبون '+formatMad(result.dueMinor)+'.');
-      }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
-      await refreshDistributionOrders(db);
-      await refreshCashSessions(db);
-      await refresh(repository??new ProductRepository(db));
-      setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
-      setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
-      setMovementHistory(await new StockRepository(db).getRecentMovements());
-      setDeliveryCollectedAmounts(current=>{const next={...current};delete next[order.id];return next;});
-    }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تأكيد تسليم الطلب.');}
-    finally{setSaving(false);}
-  }
-
-  async function submitCashHandover(event:FormEvent<HTMLFormElement>){
-    if(!requirePermission('handover_own_cash'))return;
-    event.preventDefault();
-    const session=cashSessions.find(item=>item.id===handoverSessionId);
-    const receiver=teamUsers.find(item=>item.id===handoverReceiverId&&item.is_active===1);
-    const amount=madToMinorUnits(Number(handoverAmount));
-    if(!session||session.status!=='open'){setError('اختار جلسة نقدية مفتوحة.');return;}
-    if(currentUser?.role!=='owner'&&session.user_id!==currentUser?.id){setError('يمكنك تسليم النقدية ديال عهدتك فقط.');return;}
-    if(!receiver||!['owner','depot_manager'].includes(receiver.role)){setError('المستلم خاصو يكون المالك أو مسؤول الديبو.');return;}
-    const outstanding=Number(session.expected_cash_minor)-Number(session.handed_cash_minor);
-    if(!Number.isSafeInteger(amount)||amount<=0||amount>outstanding){setError('مبلغ التسليم خاصو يكون أكبر من صفر وما يفوتش المبلغ اللي باقي فالعهدة.');return;}
-    setError('');setNotice('');setSaving(true);
-    try{
-      const db=await openAppDatabase(),now=new Date().toISOString(),receipt='REC-'+Date.now();
-      await db.beginTransaction();
-      try{
-        const latestSession=await db.query("SELECT expected_cash_minor,status FROM cash_sessions WHERE id=?",[session.id]);
-        const live=latestSession.values?.[0];
-        if(!live||String(live.status)!=='open')throw new Error('العهدة تسلمات أو تسدات من قبل؛ حدّث اللائحة.');
-        const handedRows=await db.query('SELECT COALESCE(SUM(amount_minor),0) AS total FROM cash_handovers WHERE session_id=?',[session.id]);
-        const totalAlreadyHanded=Number(handedRows.values?.[0]?.total??0);
-        const liveExpected=Number(live.expected_cash_minor);
-        const liveOutstanding=liveExpected-totalAlreadyHanded;
-        if(!Number.isSafeInteger(liveExpected)||!Number.isSafeInteger(totalAlreadyHanded)||liveOutstanding<0||amount>liveOutstanding)throw new Error('تبدل رصيد العهدة؛ المبلغ اللي بقى أقل من المبلغ اللي بغيتي تسلم. حدّث اللائحة.');
-        await db.run('INSERT INTO cash_handovers (id,session_id,from_user_id,to_user_id,amount_minor,receipt_number,received_at,note) VALUES (?,?,?,?,?,?,?,?)',[crypto.randomUUID(),session.id,session.user_id,receiver.id,amount,receipt,now,'تسليم نقدية من '+session.user_name]);
-        await db.run("INSERT INTO payments (id,invoice_id,customer_id,amount_minor,method,payment_kind,received_by,received_at,note) VALUES (?,NULL,NULL,?,'cash','cash_handover',?,?,?)",[crypto.randomUUID(),amount,receiver.id,now,'وصل تسليم '+receipt]);
-        const totalHanded=totalAlreadyHanded+amount;
-        if(totalHanded>=liveExpected)await db.run("UPDATE cash_sessions SET status='submitted',closed_at=? WHERE id=? AND status='open'",[now,session.id]);
-        await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),currentUser.id,'cash.handed_over','cash_session',session.id,JSON.stringify({receipt,from:session.user_id,to:receiver.id,amountMinor:amount,totalHanded}),now]);
-        await db.commitTransaction();
-      }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
-      await refreshCashSessions(db);setHandoverAmount('');setNotice('تسجل وصل تسليم النقدية '+receipt+' بقيمة '+formatMad(amount)+'.');
-    }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تسجيل تسليم النقدية.');}
-    finally{setSaving(false);}
-  }
-
-  async function reconcileCashSession(session:CashSessionRow){
-    if(!requirePermission('reconcile_cash'))return;
-    if(session.status!=='submitted'){setError('خاص جلسة النقدية تكون تسلمات قبل المطابقة.');return;}
-    const counted=madToMinorUnits(Number(cashCountedAmounts[session.id]??''));
-    const reason=(cashDiscrepancyReasons[session.id]??'').trim();
-    let reconciledDifference=0;
-    if(!Number.isSafeInteger(counted)||counted<0){setError('دخل المبلغ اللي تعدّ فعلياً فالديبو.');return;}
-    setError('');setNotice('');setSaving(true);
-    try{
-      const db=await openAppDatabase(),now=new Date().toISOString();
-      await db.beginTransaction();
-      try{
-        const latestSession=await db.query("SELECT expected_cash_minor,status FROM cash_sessions WHERE id=?",[session.id]);
-        const live=latestSession.values?.[0];
-        if(!live||String(live.status)!=='submitted')throw new Error('حالة العهدة تبدلات؛ ما بقاتش كتسنى المطابقة.');
-        const liveExpected=Number(live.expected_cash_minor);
-        const liveDifference=counted-liveExpected;
-        if(!Number.isSafeInteger(liveExpected)||liveExpected<0)throw new Error('المبلغ المتوقع فالعهدة غير صالح وخصو مراجعة.');
-        if(liveDifference!==0&&!reason)throw new Error('كتب سبب الفرق بين المبلغ المتوقع الحالي والمبلغ المعدود.');
-        reconciledDifference=liveDifference;
-        await db.run("UPDATE cash_sessions SET counted_cash_minor=?,discrepancy_reason=?,status='reconciled' WHERE id=? AND status='submitted'",[counted,reason||null,session.id]);
-        await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),currentUser?.id??'local-owner','cash.reconciled','cash_session',session.id,JSON.stringify({expectedMinor:liveExpected,countedMinor:counted,differenceMinor:liveDifference,reason}),now]);
-        await db.commitTransaction();
-      }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
-      await refreshCashSessions(db);setNotice(reconciledDifference===0?'تطابقت جلسة النقدية بنجاح.':'تسجلات المطابقة مع فرق '+formatSignedMad(reconciledDifference)+' وسبب الفرق.');
-    }catch(reason){setError(reason instanceof Error?reason.message:'تعذر إتمام مطابقة النقدية.');}
-    finally{setSaving(false);}
-  }
-
-  async function changeOrderStatus(order:DistributionOrderRow,next:DistributionOrderRow['status']){
-    if(!requirePermission('prepare_orders'))return;
-    if(!canTransitionDistributionOrder(order.status,next)){setError('هاد الانتقال ما مسموحش من الحالة الحالية. خاص الطلب يدوز من مراحل التحضير بالترتيب.');return;}
-    setError('');setNotice('');setSaving(true);
-    try{
-      const db=await openAppDatabase(),now=new Date().toISOString();
-      await db.beginTransaction();
-      try{
-        const latest=await db.query('SELECT status FROM sales_orders WHERE id=?',[order.id]);
-        if(!latest.values?.[0]||String(latest.values[0].status)!==order.status)throw new Error('حالة الطلب تبدلات من طرف مستخدم آخر؛ حدّث اللائحة قبل المحاولة.');
-        await db.run('UPDATE sales_orders SET status=?,updated_at=? WHERE id=? AND status=?',[next,now,order.id,order.status]);
-        await db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[crypto.randomUUID(),currentUser?.id??'local-owner','order.status_changed','sales_order',order.id,JSON.stringify({from:order.status,to:next}),now]);
-        await db.commitTransaction();
-      }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
-      await refreshDistributionOrders(db);setNotice('تحدّثت حالة الطلب '+order.order_number+'.');
-    }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تحديث حالة الطلب.');}
-    finally{setSaving(false);}
-  }
-
-  async function submitTeamMember(event:FormEvent<HTMLFormElement>){
-    if(!requirePermission('manage_team'))return;
-    event.preventDefault();
-    const cleanName=teamName.trim();
-    if(!cleanName){setError('اسم المستخدم مطلوب.');return;}
-    if(!isValidPin(teamPin)){setError('رمز PIN ديال المستخدم خاصو يكون من 4 حتى 8 أرقام.');return;}
-    setError('');setNotice('');setSaving(true);
-    try{
-      const db=await openAppDatabase(),now=new Date().toISOString(),id=crypto.randomUUID(),credentials=await hashPin(teamPin);
-      await db.run('INSERT INTO users (id,display_name,phone,role,is_active,created_at,updated_at,pin_salt,pin_hash) VALUES (?,?,?,?,1,?,?,?,?)',[id,cleanName,teamPhone.trim()||null,teamRole,now,now,credentials.salt,credentials.hash]);
-      const result=await db.query('SELECT id,display_name,phone,role,is_active,pin_salt,pin_hash FROM users ORDER BY display_name');
-      const updatedUsers=(result.values??[]) as unknown as AuthUser[];
-      setTeamUsers(updatedUsers);setAuthUsers(updatedUsers);
-      setTeamName('');setTeamPhone('');setTeamPin('');
-      setNotice('تسجل عضو الفريق ورمز الدخول ديالو بنجاح.');
-    }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تسجيل عضو الفريق.');}
-    finally{setSaving(false);}
-  }
-
-  async function saveVehicleAssignment(vehicle:TeamVehicle){
-    if(!requirePermission('manage_vehicles'))return;
-    const userId=assignment[vehicle.id]??vehicle.assigned_user_id??'';
-    if(userId){
-      const user=teamUsers.find(item=>item.id===userId);
-      const expectedRole=vehicle.vehicle_type==='van_sales'?'van_sales':'delivery_driver';
-      if(!user||user.role!==expectedRole){setError(vehicle.vehicle_type==='van_sales'?'السيارة ديال البيع خاصها تتربط بمندوب بيع بالسيارة.':'سيارة التوصيل خاصها تتربط بسائق.');return;}
-    }
-    setError('');setNotice('');setSaving(true);
-    try{
-      const db=await openAppDatabase();
-      await db.run('UPDATE vehicles SET assigned_user_id=?,updated_at=? WHERE id=?',[userId||null,new Date().toISOString(),vehicle.id]);
-      const result=await db.query('SELECT v.id,v.code,v.label,v.vehicle_type,v.assigned_user_id,u.display_name AS assigned_name FROM vehicles v LEFT JOIN users u ON u.id=v.assigned_user_id WHERE v.is_active=1 ORDER BY v.code');
-      setTeamVehicles((result.values??[]) as unknown as TeamVehicle[]);
-      setNotice('تحدّث تعيين السيارة بنجاح.');
-    }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تحديث تعيين السيارة.');}
-    finally{setSaving(false);}
-  }
-
-  const visibleProducts = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase();
-    return products.filter(p => !term || [p.name, p.category, p.subcategory, p.barcode].some(v => v?.toLocaleLowerCase().includes(term)));
-  }, [products, search]);
-
   async function submitStock(event: FormEvent<HTMLFormElement>) {
     if(!requirePermission('adjust_depot_stock'))return;
     event.preventDefault();
@@ -642,49 +305,6 @@ export default function App() {
     finally { setSaving(false); }
   }
 
-
-  async function submitVehicleSale(event: FormEvent<HTMLFormElement>) {
-    if(!requirePermission('create_vehicle_sales'))return;
-    event.preventDefault();
-    if(!saleCustomerId||saleLines.length===0||saleLines.some(line=>!line.productId||!Number.isFinite(Number(line.quantity))||Number(line.quantity)<=0)){setError('اختار الزبون والمنتجات والكميات الصحيحة.');return;}
-    const collectedMinor=madToMinorUnits(Number(saleCollected||0));
-    if(!Number.isSafeInteger(collectedMinor)||collectedMinor<0){setError('راجع المبلغ اللي تجمع دابا.');return;}
-    if(collectedMinor>0&&!requirePermission('collect_vehicle_sales_cash'))return;
-    setError('');setNotice('');setSaving(true);
-    try{
-      const db=await openAppDatabase();
-      const assigned=await db.query("SELECT v.id,v.assigned_user_id,sl.id AS location_id FROM vehicles v JOIN stock_locations sl ON sl.vehicle_id=v.id AND sl.location_type='vehicle' AND sl.is_active=1 WHERE v.vehicle_type='van_sales' AND v.is_active=1 AND v.assigned_user_id=?",[currentUser?.id]);
-      if((assigned.values??[]).length!==1)throw new Error('خاص تكون عندك سيارة بيع نشيطة واحدة معيّنة ليك ومخزونها مفعّل.');
-      const vehicle=assigned.values?.[0];
-      if(!vehicle?.location_id)throw new Error('مخزون سيارة البيع غير موجود.');
-      await db.beginTransaction();
-      try{
-        const liveVehicle=await db.query("SELECT v.id FROM vehicles v JOIN stock_locations sl ON sl.vehicle_id=v.id AND sl.location_type='vehicle' AND sl.is_active=1 WHERE v.id=? AND v.vehicle_type='van_sales' AND v.is_active=1 AND v.assigned_user_id=?",[String(vehicle.id),currentUser!.id]);
-        if(!liveVehicle.values?.length)throw new Error('تعيين سيارة البيع تبدل؛ حدّث بيانات السيارة قبل تسجيل الفاتورة.');
-        const result=await new SalesRepository(db).create({
-          id:crypto.randomUUID(),invoiceNumber:'TV-'+Date.now(),customerId:saleCustomerId,
-          sellerUserId:currentUser!.id,locationId:String(vehicle.location_id),vehicleId:String(vehicle.id),
-          lines:saleLines.map(line=>({productId:line.productId,quantity:Number(line.quantity)})),
-          collectedMinor,paymentMethod:'cash',note:'بيع مباشر من سيارة البيع',
-        },'external');
-        const now=new Date().toISOString();
-        if(collectedMinor>0){
-          const active=await db.query("SELECT id FROM cash_sessions WHERE user_id=? AND vehicle_id=? AND status='open' ORDER BY opened_at DESC LIMIT 1",[currentUser!.id,String(vehicle.id)]);
-          if(active.values?.[0])await db.run('UPDATE cash_sessions SET expected_cash_minor=expected_cash_minor+? WHERE id=?',[collectedMinor,active.values[0].id]);
-          else await db.run("INSERT INTO cash_sessions (id,user_id,vehicle_id,opened_at,opening_cash_minor,expected_cash_minor,status) VALUES (?,?,?,?,0,?,'open')",[crypto.randomUUID(),currentUser!.id,String(vehicle.id),now,collectedMinor]);
-        }
-        await db.commitTransaction();
-        setNotice('تسجلات فاتورة السيارة '+result.invoiceNumber+'. المحصل '+formatMad(result.collectedMinor)+' والباقي '+formatMad(result.dueMinor)+'.');
-      }catch(error){await db.rollbackTransaction().catch(()=>undefined);throw error;}
-      await refresh(repository??new ProductRepository(db));
-      setCustomers(await new CustomerRepository(db).list());
-      setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
-      setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
-      await refreshCashSessions(db);
-      setSaleLines([{productId:'',quantity:'1'}]);setSaleCollected('');
-    }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تسجيل بيع السيارة.');}
-    finally{setSaving(false);}
-  }
 
   async function submitSale(event: FormEvent<HTMLFormElement>) {
     if(!requirePermission('create_depot_sales'))return;
