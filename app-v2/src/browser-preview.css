@@ -36,3 +36,17 @@
 .pv-hint{color:#9ba39e}
 @media(max-width:620px){.pv-top{height:62px}.pv-body{padding-top:18px}.pv-heading h1{font-size:22px}.pv-hero{min-height:118px;padding:18px;border-radius:17px}.pv-hero h2{font-size:20px}.pv-kpis article{padding:13px 13px 12px;border-radius:14px}.pv-screen{padding:15px}.pv-pages>.pv-screen{border-radius:16px}.pv-product-img{aspect-ratio:1.18}}
 @media(prefers-reduced-motion:reduce){.pv-app *{scroll-behavior:auto!important;transition:none!important}}
+
+
+/* Preview dock mirrors the native premium bottom navigation */
+.pv-nav{left:50%;right:auto;inset-inline:auto;transform:translateX(-50%);bottom:calc(12px + env(safe-area-inset-bottom,0px));width:min(760px,calc(100% - 28px));justify-content:space-around;align-items:center;gap:5px;padding:8px 10px;border:1px solid #e3e8e1;border-radius:22px;background:rgba(255,254,250,.94);box-shadow:0 12px 38px #142e3022,0 2px 8px #142e300c;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.pv-nav button{position:relative;display:flex;flex:1 1 0;min-width:0;min-height:54px;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:5px 3px;border-radius:15px;transition:background .2s ease,color .2s ease,transform .2s ease}
+.pv-nav button b{display:grid;place-items:center;width:29px;height:27px;font-size:21px;line-height:1}
+.pv-nav button span{font-size:9px;line-height:1.2;font-weight:700}
+.pv-nav button.active{background:linear-gradient(145deg,#eaf3ec,#e3eee7);color:#176b5d;box-shadow:inset 0 0 0 1px #d6e6da}
+.pv-nav button.active:before{content:"";position:absolute;top:4px;left:50%;width:16px;height:2px;transform:translateX(-50%);border-radius:4px;background:#23816b}
+.pv-nav button:active{transform:scale(.94)}
+.pv-nav button:focus-visible{outline:2px solid #5d9c86;outline-offset:2px}
+.pv-app{padding-bottom:105px}
+@media(min-width:761px){.pv-nav{bottom:18px;width:min(700px,calc(100% - 40px))}.pv-nav button{min-height:58px}.pv-nav button span{font-size:10px}}
+@media(max-width:420px){.pv-nav{width:calc(100% - 16px);bottom:calc(7px + env(safe-area-inset-bottom,0px));gap:2px;padding:7px 5px;border-radius:19px}.pv-nav button{min-height:51px;border-radius:13px}.pv-nav button b{font-size:19px;width:25px}.pv-nav button span{font-size:8px}}
