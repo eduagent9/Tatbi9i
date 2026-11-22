@@ -85,7 +85,7 @@ export class StockRepository {
        JOIN products p ON p.id=sb.product_id
        JOIN product_batches pb ON pb.id=sb.batch_id
        JOIN stock_locations sl ON sl.id=sb.location_id
-       WHERE sb.quantity>0 AND pb.expiry_date IS NOT NULL
+       WHERE sb.quantity>0 AND pb.expiry_date IS NOT NULL AND sl.location_type='depot'
        ORDER BY pb.expiry_date ASC,p.name COLLATE NOCASE`,
     );
     return (result.values??[]) as unknown as ExpiryAlertRow[];
