@@ -43,6 +43,6 @@ export default function BrowserPreview(){
    {active==='management'&&<div className="pv-pages"><ScreenCard title="التقارير المالية" subtitle="أرقام مركزة بدون ازدحام"><div className="pv-kpis pv-report"><article><small>المبيعات</small><b>84,500 <i>DH</i></b></article><article><small>تكلفة البضاعة</small><b>62,100 <i>DH</i></b></article><article><small>الربح الإجمالي</small><b>22,400 <i>DH</i></b></article><article><small>المصاريف</small><b>4,200 <i>DH</i></b></article></div></ScreenCard><ScreenCard title="الفريق والسيارات" subtitle="إدارة المستخدمين والتعيينات"><div className="pv-list"><div><b>ياسين</b><small>مندوب بيع · السيارة 01</small><strong className="pv-green">نشط</strong></div><div><b>أمين</b><small>سائق توصيل · السيارة 02</small><strong className="pv-green">نشط</strong></div></div><button className="pv-primary">إدارة الفريق</button></ScreenCard></div>}
    <p className="pv-hint">اسحب أفقياً للتنقل بين شاشات هذا القسم ←</p>
   </div>
-  <nav className="pv-nav">{nav.map(item=><button key={item.id} className={active===item.id?'active':''} onClick={()=>{setActive(item.id);setQuery('')}}><b>{item.icon}</b><span>{item.label}</span></button>)}</nav>
+  <nav className="pv-nav" aria-label="الأقسام الرئيسية">{nav.map(item=><button key={item.id} aria-label={item.label} aria-current={active===item.id?'page':undefined} className={active===item.id?'active':''} onClick={()=>{setActive(item.id);setQuery('')}}><b aria-hidden="true">{item.icon}</b><span>{item.label}</span></button>)}</nav>
  </main>;
 }
