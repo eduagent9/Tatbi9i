@@ -41,7 +41,7 @@ describe('ProductRepository', () => {
     const rows = await new ProductRepository(db).list();
     expect(rows[0]).toMatchObject({ id: 'p1', total_stock: 12, barcode: '6110001' });
     expect(db.query).toHaveBeenCalledOnce();
-    expect(db.query).toHaveBeenCalledWith(expect.stringContaining("location_type='depot'"));
+    expect(db.query).toHaveBeenCalledWith(expect.stringContaining('LEFT JOIN stock_balances sb ON sb.product_id=p.id'));
   });
   it('updates catalog details and replaces the barcode without touching stock history',async()=>{
     const db=fakeDb(),repo=new ProductRepository(db,()=> '2026-11-21T12:00:00.000Z');
