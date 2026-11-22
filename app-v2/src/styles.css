@@ -151,7 +151,7 @@ footer{position:static;margin-top:22px}
 .personal-mode .team-panel{display:none!important}
 .personal-orders-panel{grid-column:1/-1}
 .personal-product-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}
-.personal-product-card{min-width:0;overflow:hidden;border:1px solid #e3eaed;border-radius:15px;background:#fff;display:flex;flex-direction:column;aspect-ratio:.58;box-shadow:0 5px 18px #203c4a0b}
+.personal-product-card{min-width:0;height:260px;overflow:hidden;border:1px solid #e3eaed;border-radius:15px;background:#fff;display:flex;flex-direction:column;aspect-ratio:auto;box-shadow:0 5px 18px #203c4a0b}
 .personal-product-image{position:relative;flex:1;min-height:0;width:100%;background:#f2f6f7;overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:zoom-in}
 .personal-product-image img{width:100%;height:100%;object-fit:cover;display:block}
 .personal-product-placeholder{color:#93a5ac;font-size:12px}
