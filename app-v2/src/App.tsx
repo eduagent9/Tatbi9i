@@ -118,19 +118,15 @@ export default function App() {
       if (!alive) return;
       const repo = new ProductRepository(db);
       setRepository(repo);
-      const [usersResult,vehiclesResult]=await Promise.all([
-        db.query("SELECT id,display_name,phone,role,is_active,pin_salt,pin_hash FROM users ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'depot_manager' THEN 1 ELSE 2 END,display_name"),
-        db.query("SELECT v.id,v.code,v.label,v.vehicle_type,v.assigned_user_id,u.display_name AS assigned_name FROM vehicles v LEFT JOIN users u ON u.id=v.assigned_user_id WHERE v.is_active=1 ORDER BY v.code")
-      ]);
-      const loadedUsers=(usersResult.values??[]) as unknown as AuthUser[];
-      setTeamUsers(loadedUsers);
-      setAuthUsers(loadedUsers.filter(user=>user.id==='local-owner'));
-      const owner=loadedUsers.find(user=>user.id==='local-owner');
+      // Personal single-owner mode: only the local owner can enter the app.
+      // Legacy team/vehicle rows are intentionally left untouched in SQLite.
+      const usersResult=await db.query("SELECT id,display_name,phone,role,is_active,pin_salt,pin_hash FROM users WHERE id='local-owner' LIMIT 1");
+      const owner=(usersResult.values??[])[0] as unknown as AuthUser|undefined;
+      setTeamUsers([]);
+      setAuthUsers(owner?[owner]:[]);
+      setTeamVehicles([]);
       setAuthMode(owner?.pin_hash&&owner?.pin_salt?'login':'setup');
-      setAuthUserId(owner?.id??loadedUsers.find(user=>user.is_active===1&&user.pin_hash&&user.pin_salt)?.id??'local-owner');
-      await refreshDistributionOrders(db);
-      await refreshCashSessions(db);
-      setTeamVehicles((vehiclesResult.values??[]) as unknown as TeamVehicle[]);
+      setAuthUserId('local-owner');
       await refresh(repo);
       setCustomers(await new CustomerRepository(db).list());
       setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
@@ -686,7 +682,6 @@ export default function App() {
       setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
       setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
       await refreshCashSessions(db);
-      await refreshDistributionOrders(db);
       setSaleLines([{productId:'',quantity:'1'}]);setSaleCollected('');
     }catch(reason){setError(reason instanceof Error?reason.message:'تعذر تسجيل بيع السيارة.');}
     finally{setSaving(false);}
@@ -770,7 +765,7 @@ export default function App() {
       </section>}
 
       {!loading&&!currentUser&&authMode==='setup'&&<section className="panel auth-panel"><div className="panel-heading"><div><h3>إعداد دخول المالك</h3><p>أول مرة خاصك تختار رمز PIN خاص بالمالك. غادي يتخزن كـ hash مملح، ماشي كنص واضح.</p></div></div><form onSubmit={setupOwnerPin}><label>رمز PIN (4 إلى 8 أرقام)<input type="password" inputMode="numeric" autoComplete="new-password" maxLength={8} required value={setupPin} onChange={e=>setSetupPin(e.target.value)} /></label><label>تأكيد رمز PIN<input type="password" inputMode="numeric" autoComplete="new-password" maxLength={8} required value={setupPinConfirm} onChange={e=>setSetupPinConfirm(e.target.value)} /></label><button className="primary-button" disabled={saving}>{saving?'كيتم الإعداد...':'حفظ رمز المالك والدخول'}</button></form></section>}
-      {!loading&&!currentUser&&authMode==='login'&&<section className="panel auth-panel"><div className="panel-heading"><div><h3>تسجيل الدخول</h3><p>اختار المستخدم ودخل رمز PIN ديالو.</p></div></div><form onSubmit={loginUser}><label>المستخدم<select required value={authUserId} onChange={e=>setAuthUserId(e.target.value)}>{authUsers.filter(user=>user.is_active===1&&user.pin_hash&&user.pin_salt).map(user=><option key={user.id} value={user.id}>{user.display_name} · {roleLabels[user.role]}</option>)}</select></label><label>رمز PIN<input type="password" inputMode="numeric" autoComplete="current-password" maxLength={8} required value={authPin} onChange={e=>setAuthPin(e.target.value)} /></label><button className="primary-button" disabled={saving}>{saving?'كيتم التحقق...':'دخول'}</button></form></section>}
+      {!loading&&!currentUser&&authMode==='login'&&<section className="panel auth-panel"><div className="panel-heading"><div><h3>تسجيل الدخول</h3><p>دخل رمز PIN ديال المالك.</p></div></div><form onSubmit={loginUser}><label>الحساب<input value="المالك" disabled /></label><label>رمز PIN<input type="password" inputMode="numeric" autoComplete="current-password" maxLength={8} required value={authPin} onChange={e=>setAuthPin(e.target.value)} /></label><button className="primary-button" disabled={saving}>{saving?'كيتم التحقق...':'دخول'}</button></form></section>}
       {currentUser?.role==='order_rep'&&repository&&<div className="content-grid">
         <section data-section="management" className="panel team-panel">
           <div className="panel-heading"><div><h3>تسجيل طلب محل</h3><p>سجل الكميات المطلوبة من المحل وأرسلها للديبو للتحضير</p></div><span className="step-mark">طلب جديد</span></div>
