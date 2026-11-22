@@ -275,3 +275,27 @@ input:focus,select:focus{border-color:#4f9682;box-shadow:0 0 0 3px #4f96821c}
 .finance-grid .net-profit{background:#eaf3ed;border-color:#d5e5d8}
 .message{border-radius:13px}
 @media(max-width:760px){.panel{padding:15px}.dashboard-welcome{border-radius:17px}.main-section-nav{backdrop-filter:blur(16px)}}
+
+
+/* Floating premium navigation dock */
+.main-section-nav{
+  position:fixed;top:auto;bottom:calc(12px + env(safe-area-inset-bottom,0px));left:50%;right:auto;inset-inline:auto;
+  transform:translateX(-50%);width:min(760px,calc(100% - 28px));justify-content:space-around;align-items:center;
+  gap:5px;padding:8px 10px;border:1px solid #e3e8e1;border-radius:22px;
+  background:rgba(255,254,250,.94);box-shadow:0 12px 38px #142e3022,0 2px 8px #142e300c;
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)
+}
+.main-section-nav button{
+  position:relative;display:flex;flex:1 1 0;min-width:0;min-height:54px;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;padding:5px 3px;border:0;border-radius:15px;background:transparent;color:#89958f;
+  transition:background .2s ease,color .2s ease,transform .2s ease
+}
+.main-section-nav button .nav-icon{display:grid;place-items:center;width:29px;height:27px;font-size:21px;line-height:1;color:inherit}
+.main-section-nav button .nav-label{display:block;font-size:9px;line-height:1.2;font-weight:700;white-space:nowrap}
+.main-section-nav button.active{background:linear-gradient(145deg,#eaf3ec,#e3eee7);color:#176b5d;box-shadow:inset 0 0 0 1px #d6e6da}
+.main-section-nav button.active:before{content:"";position:absolute;top:4px;left:50%;width:16px;height:2px;transform:translateX(-50%);border-radius:4px;background:#23816b}
+.main-section-nav button:active{transform:scale(.94)}
+.main-section-nav button:focus-visible{outline:2px solid #5d9c86;outline-offset:2px}
+.app-shell{padding-bottom:calc(112px + env(safe-area-inset-bottom,0px))}
+@media(min-width:761px){.main-section-nav{bottom:18px;width:min(700px,calc(100% - 40px))}.main-section-nav button{min-height:58px}.main-section-nav button .nav-label{font-size:10px}}
+@media(max-width:420px){.main-section-nav{width:calc(100% - 16px);bottom:calc(7px + env(safe-area-inset-bottom,0px));gap:2px;padding:7px 5px;border-radius:19px}.main-section-nav button{min-height:51px;border-radius:13px}.main-section-nav button .nav-icon{font-size:19px;width:25px}.main-section-nav button .nav-label{font-size:8px}.app-shell{padding-bottom:calc(105px + env(safe-area-inset-bottom,0px))}}
