@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useState,type ReactNode} from 'react';
 import './browser-preview.css';
 
 type Section='home'|'sales'|'inventory'|'distribution'|'purchases'|'relations'|'management';
@@ -17,7 +17,7 @@ const products=[
   {name:'حليب UHT',category:'مواد غذائية',price:'9.50 DH',stock:'120',emoji:'🥛',tone:'cream'},
   {name:'منظف متعدد الاستعمال',category:'تنظيف',price:'22.00 DH',stock:'18',emoji:'🧴',tone:'green'}
 ];
-function ScreenCard({title,subtitle,children,tag}:{title:string;subtitle?:string;children:React.ReactNode;tag?:string}){
+function ScreenCard({title,subtitle,children,tag}:{title:string;subtitle?:string;children:ReactNode;tag?:string}){
  return <article className="pv-screen"><header className="pv-screen-head"><div><h3>{title}</h3>{subtitle&&<p>{subtitle}</p>}</div>{tag&&<span>{tag}</span>}</header>{children}</article>;
 }
 export default function BrowserPreview(){
