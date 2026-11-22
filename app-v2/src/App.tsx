@@ -29,6 +29,8 @@ const roleLabels:Record<'owner',string>={owner:'المالك'};
 export default function App() {
   const [repository, setRepository] = useState<ProductRepository | null>(null);
   const [products, setProducts] = useState<ProductRecord[]>([]);
+  const [stockLocations,setStockLocations]=useState<Array<{id:string;label:string}>>([]);
+  const [saleLocationId,setSaleLocationId]=useState('loc-depot-main');
   const [expiryAlerts, setExpiryAlerts] = useState<ExpiryAlertRow[]>([]);
   const [movementHistory, setMovementHistory] = useState<StockMovementRecord[]>([]);
   const [authUsers,setAuthUsers]=useState<AuthUser[]>([]);
@@ -94,6 +96,8 @@ export default function App() {
       if (!alive) return;
       const repo = new ProductRepository(db);
       setRepository(repo);
+      const locationsResult=await db.query("SELECT id,label FROM stock_locations WHERE is_active=1 ORDER BY CASE location_type WHEN 'depot' THEN 0 ELSE 1 END,label");
+      setStockLocations((locationsResult.values??[]) as unknown as Array<{id:string;label:string}>);
       // Personal single-owner mode: only the local owner can enter the app.
       // Legacy team/vehicle rows are intentionally left untouched in SQLite.
       const usersResult=await db.query("SELECT id,display_name,phone,role,is_active,pin_salt,pin_hash FROM users WHERE id='local-owner' LIMIT 1");
@@ -319,7 +323,7 @@ export default function App() {
       const collectedMinor = madToMinorUnits(Number(saleCollected || 0));
       const result = await new SalesRepository(db).create({
         id: crypto.randomUUID(), invoiceNumber: 'T-' + Date.now(),
-        customerId: saleCustomerId, sellerUserId: currentUser?.id??'local-owner', locationId: 'loc-depot-main',
+        customerId: saleCustomerId, sellerUserId: currentUser?.id??'local-owner', locationId: saleLocationId,
         lines: saleLines.map(line=>({productId:line.productId,quantity:Number(line.quantity)})),
         discountMinor, collectedMinor, paymentMethod: 'cash',
       });
@@ -523,6 +527,7 @@ export default function App() {
         </section>
         <section id="sales-section" data-section="sales" className="panel sales-panel"><div className="panel-heading"><div><h3>فاتورة بيع جديدة</h3><p>فاتورة متعددة المنتجات مع تخفيض وأداء جزئي</p></div><span className="step-mark">05</span></div>
           <form onSubmit={submitSale}>
+            <label>مكان البيع<select required value={saleLocationId} onChange={e=>setSaleLocationId(e.target.value)}>{stockLocations.map(location=><option key={location.id} value={location.id}>{location.label}</option>)}</select></label>
             <label>الزبون<select required value={saleCustomerId} onChange={e => setSaleCustomerId(e.target.value)}><option value="">اختار الزبون</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
             {saleLines.map((line,index)=><div className="sale-line" key={index}>
               <label>المنتج<select required value={line.productId} onChange={e=>setSaleLines(current=>current.map((item,i)=>i===index?{...item,productId:e.target.value}:item))}><option value="">اختار المنتج</option>{products.map(product=><option key={product.id} value={product.id}>{product.name} · {formatMad(product.sale_price_minor)}</option>)}</select></label>
@@ -534,7 +539,7 @@ export default function App() {
             <label>المبلغ المؤدى دابا (DH)<input type="number" min="0" step="0.01" value={saleCollected} onChange={e => setSaleCollected(e.target.value)} placeholder="0.00 إذا البيع بالدين" /></label>
             <button className="primary-button" disabled={saving || products.length === 0 || customers.length === 0 || saleLines.length===0}>{saving ? 'كتتسجل الفاتورة...' : 'تأكيد البيع وخصم المخزون'}</button>
           </form>
-          <p className="hint">الفاتورة كتجمع عدة منتجات، وكتتسجل تفاصيل الثمن والتكلفة وكتنقص الكميات من المستودع. البيع كيرفض إلا ما كانش المخزون كافي.</p>
+          <p className="hint">اختار المستودع أو السيارة كمصدر للبيع؛ الفاتورة كتنقص الكمية من المكان المختار فقط، وكتسجل المبيعات والديون بشكل مستقل.</p>
         </section>
         <PersonalOrdersPanel ownerId={currentUser.id} customers={customers} productColumns={productColumns} onProductColumnsChange={setProductColumns} onChanged={async()=>{if(repository){await refresh(repository);const db=await openAppDatabase();setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());setMovementHistory(await new StockRepository(db).getRecentMovements());}}}/>
         <InvoiceArchivePanel onSelect={invoice=>setLastInvoice(invoice)}/>
