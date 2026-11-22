@@ -32,12 +32,15 @@ export function StockAndReturnsPanel(){
  const [transferDestination,setTransferDestination]=useState('');
  const [transferQuantity,setTransferQuantity]=useState('');
  const [newLocationLabel,setNewLocationLabel]=useState('');
+ const [newLocationKind,setNewLocationKind]=useState<'depot'|'vehicle'>('vehicle');
+ const [newVehicleCode,setNewVehicleCode]=useState('');
+ const [countLocation,setCountLocation]=useState(depot);
     const [busy,setBusy]=useState(false);
  const [message,setMessage]=useState('');
  const [error,setError]=useState('');
  const selectedInvoice=useMemo(()=>invoices.find(x=>x.id===invoiceId),[invoices,invoiceId]);
 
- async function loadCounts(connection:SqliteExecutor){
+ async function loadCounts(connection:SqliteExecutor,locationId=countLocation){
   const result=await connection.query(`SELECT p.id AS product_id,p.name AS product_name,
     b.variant_id,v.variant_name,b.batch_id,pb.batch_code,COALESCE(b.quantity,0) AS expected
     FROM products p
@@ -45,19 +48,19 @@ export function StockAndReturnsPanel(){
     LEFT JOIN product_variants v ON v.id=b.variant_id
     LEFT JOIN product_batches pb ON pb.id=b.batch_id
     WHERE p.is_active=1
-    ORDER BY p.name,pb.expiry_date,pb.batch_code`,[depot]);
+    ORDER BY p.name,pb.expiry_date,pb.batch_code`,[locationId]);
   const rows=(result.values??[]) as unknown as Array<Omit<CountRow,'counted'>>;
   setCounts(rows.map(r=>({...r,counted:''})));
  }
  async function loadTransferOptions(connection:SqliteExecutor){
   const [loc,bal]=await Promise.all([
-   connection.query(`SELECT id,label FROM stock_locations WHERE is_active=1 AND location_type='depot' ORDER BY label`),
+   connection.query(`SELECT id,label FROM stock_locations WHERE is_active=1 ORDER BY CASE location_type WHEN 'depot' THEN 0 ELSE 1 END,label`),
    connection.query(`SELECT sb.id AS balance_id,sb.product_id,p.name AS product_name,sb.variant_id,v.variant_name,
     sb.batch_id,pb.batch_code,sb.location_id,sl.label AS location_label,sb.quantity
     FROM stock_balances sb JOIN products p ON p.id=sb.product_id
     JOIN stock_locations sl ON sl.id=sb.location_id
     LEFT JOIN product_variants v ON v.id=sb.variant_id LEFT JOIN product_batches pb ON pb.id=sb.batch_id
-    WHERE sb.quantity>0 AND p.is_active=1 AND sl.is_active=1 AND sl.location_type='depot' ORDER BY p.name,sl.label,pb.expiry_date`)
+    WHERE sb.quantity>0 AND p.is_active=1 AND sl.is_active=1 ORDER BY p.name,sl.label,pb.expiry_date`)
   ]);
   setLocations((loc.values??[]) as unknown as LocationOption[]);
   setTransferBalances((bal.values??[]) as unknown as TransferBalance[]);
@@ -97,8 +100,8 @@ export function StockAndReturnsPanel(){
  async function submitLocation(event:FormEvent<HTMLFormElement>){
   event.preventDefault();if(!db)return;setError('');setMessage('');setBusy(true);
   try{
-   const result=await new StockLocationRepository(db).create({id:uid(),label:newLocationLabel,kind:'depot',createdBy:owner});
-   await loadTransferOptions(db);setNewLocationLabel('');
+   const result=await new StockLocationRepository(db).create({id:uid(),label:newLocationLabel,kind:newLocationKind,vehicleCode:newLocationKind==='vehicle'?newVehicleCode:undefined,createdBy:owner});
+   await loadTransferOptions(db);setNewLocationLabel('');setNewVehicleCode('');
    setMessage('تزادت الوجهة '+result.label+' بنجاح، وولات متاحة لتحويل المخزون.');
   }catch(e){setError(e instanceof Error?e.message:'تعذر إنشاء موقع المخزون.');}finally{setBusy(false);}
  }
@@ -114,7 +117,7 @@ export function StockAndReturnsPanel(){
    await new StockRepository(db).record({id:uid(),productId:source.product_id,variantId:source.variant_id,batchId:source.batch_id,
     fromLocationId:source.location_id,toLocationId:transferDestination,quantity,movementType:'transfer',performedBy:owner,
     referenceType:'stock_transfer',referenceId:uid(),note:'تحويل مخزون بين المواقع'});
-   await Promise.all([loadCounts(db),loadTransferOptions(db)]);
+   await Promise.all([loadCounts(db,countLocation),loadTransferOptions(db)]);
    setTransferQuantity('');setTransferBalanceId('');setTransferDestination('');
    setMessage('تم تحويل '+quantity+' من '+source.product_name+' من '+source.location_label+' بنجاح.');
   }catch(e){setError(e instanceof Error?e.message:'تعذر تحويل المخزون.');}finally{setBusy(false);}
@@ -126,9 +129,9 @@ export function StockAndReturnsPanel(){
   if(lines.some(x=>!Number.isFinite(Number(x.counted))||Number(x.counted)<0)){setError('تأكد أن كميات الجرد أرقام صحيحة أو صفر.');return;}
   setBusy(true);
   try{
-   const result=await new StockCountRepository(db).complete({id:uid(),countNumber:'JRD-'+Date.now(),locationId:depot,countedBy:owner,note:countNote,
+   const result=await new StockCountRepository(db).complete({id:uid(),countNumber:'JRD-'+Date.now(),locationId:countLocation,countedBy:owner,note:countNote,
     lines:lines.map(x=>({id:uid(),productId:x.product_id,variantId:x.variant_id,batchId:x.batch_id,countedQuantity:Number(x.counted)}))});
-   await loadCounts(db);setCountNote('');setMessage('تسجل الجرد '+result.countNumber+'؛ تمت تسوية '+result.changedLineCount+' سطر.');
+   await loadCounts(db,countLocation);setCountNote('');setMessage('تسجل الجرد '+result.countNumber+'؛ تمت تسوية '+result.changedLineCount+' سطر.');
   }catch(e){setError(e instanceof Error?e.message:'تعذر إتمام الجرد.');}finally{setBusy(false);}
  }
  async function submitReturn(event:FormEvent<HTMLFormElement>){
@@ -152,11 +155,13 @@ export function StockAndReturnsPanel(){
   <div className="panel-heading"><div><h3>الجرد والمرتجعات</h3><p>تسوية المخزون وإرجاع السلع من فواتير البيع</p></div><span className="step-mark">12</span></div>
   {error&&<p className="hint" role="alert">{error}</p>}{message&&<p className="hint" role="status">{message}</p>}
   <div className="section-divider"></div>
-  <h4>إضافة مستودع أو فرع</h4>
-  <p className="hint">زيد مستودعاً أو فرعاً إضافياً لتحويل المخزون بين المواقع.</p>
+  <h4>إعداد أماكن المخزون</h4>
+  <p className="hint">المستودع الرئيسي والسيارة جوج أماكن للمخزون؛ التحويل بينهما ماشي بيع وما كيبدلش قيمة المبيعات.</p>
   <form onSubmit={submitLocation}>
-    <label>اسم المستودع أو الفرع<input required value={newLocationLabel} onChange={e=>setNewLocationLabel(e.target.value)} placeholder="مثلاً: المستودع الرئيسي أو فرع 2"/></label>
-    <button className="primary-button" disabled={busy||!newLocationLabel.trim()}>{busy?'كيتم إنشاء الموقع...':'إضافة الموقع'}</button>
+    <label>نوع المكان<select value={newLocationKind} onChange={e=>setNewLocationKind(e.target.value as 'depot'|'vehicle')}><option value="vehicle">سيارة للبيع المتنقل</option><option value="depot">مستودع أو فرع إضافي</option></select></label>
+    <label>اسم المكان<input required value={newLocationLabel} onChange={e=>setNewLocationLabel(e.target.value)} placeholder={newLocationKind==='vehicle'?'مثلاً: السيارة 1':'مثلاً: مستودع إضافي'}/></label>
+    {newLocationKind==='vehicle'&&<label>رمز السيارة<input required value={newVehicleCode} onChange={e=>setNewVehicleCode(e.target.value)} placeholder="مثلاً: VAN-01"/></label>}
+    <button className="primary-button" disabled={busy||!newLocationLabel.trim()||(newLocationKind==='vehicle'&&!newVehicleCode.trim())}>{busy?'كيتم إنشاء المكان...':'إضافة مكان المخزون'}</button>
   </form>
   <div className="section-divider"></div>
   <h4>تحويل المخزون بين المواقع</h4>
@@ -170,7 +175,8 @@ export function StockAndReturnsPanel(){
    <button className="primary-button" disabled={busy||!transferBalanceId||!transferDestination||!transferQuantity}>{busy?'كيتم تحويل المخزون...':'تأكيد تحويل المخزون'}</button>
   </form>
   <div className="section-divider"></div>
-  <h4>جرد المستودع الرئيسي</h4>
+  <h4>جرد المخزون حسب المكان</h4>
+  <label>مكان الجرد<select value={countLocation} onChange={e=>{setCountLocation(e.target.value);loadCounts(db!,e.target.value).catch(error=>setError(error instanceof Error?error.message:'تعذر تحميل الجرد.'));}}>{locations.map(location=><option key={location.id} value={location.id}>{location.label}</option>)}</select></label>
   <p className="hint">دخل الكمية اللي لقيتي فعلياً. خانات فارغة ما كتدخلش فعملية الجرد؛ كل سطر مؤكد كيتسجل مع الرصيد والفرق وحركة التسوية.</p>
   <form onSubmit={submitCount}>
    {counts.length===0?<p className="hint">ما كايناش منتجات نشيطة للجرد.</p>:<div className="movement-list">
