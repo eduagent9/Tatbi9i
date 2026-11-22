@@ -51,13 +51,13 @@ export function StockAndReturnsPanel(){
  }
  async function loadTransferOptions(connection:SqliteExecutor){
   const [loc,bal]=await Promise.all([
-   connection.query('SELECT id,label FROM stock_locations WHERE is_active=1 ORDER BY location_type,label'),
+   connection.query('SELECT id,label FROM stock_locations WHERE is_active=1 AND location_type='depot' ORDER BY label'),
    connection.query(`SELECT sb.id AS balance_id,sb.product_id,p.name AS product_name,sb.variant_id,v.variant_name,
     sb.batch_id,pb.batch_code,sb.location_id,sl.label AS location_label,sb.quantity
     FROM stock_balances sb JOIN products p ON p.id=sb.product_id
     JOIN stock_locations sl ON sl.id=sb.location_id
     LEFT JOIN product_variants v ON v.id=sb.variant_id LEFT JOIN product_batches pb ON pb.id=sb.batch_id
-    WHERE sb.quantity>0 AND p.is_active=1 AND sl.is_active=1 ORDER BY p.name,sl.label,pb.expiry_date`)
+    WHERE sb.quantity>0 AND p.is_active=1 AND sl.is_active=1 AND sl.location_type='depot' ORDER BY p.name,sl.label,pb.expiry_date`)
   ]);
   setLocations((loc.values??[]) as unknown as LocationOption[]);
   setTransferBalances((bal.values??[]) as unknown as TransferBalance[]);
