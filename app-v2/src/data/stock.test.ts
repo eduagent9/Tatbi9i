@@ -46,6 +46,7 @@ describe('StockRepository', () => {
     const rows=await new StockRepository(db).getExpiryAlerts();
     expect(rows).toEqual([{product_id:'p1',product_name:'ماء',batch_id:'b1',batch_code:'LOT-1',expiry_date:'2026-12-01',location_label:'المستودع الرئيسي',quantity:8}]);
     expect(db.query).toHaveBeenCalledWith(expect.stringContaining('sb.quantity>0'));
+    expect(db.query).toHaveBeenCalledWith(expect.stringContaining("sl.location_type='depot'"));
   });
 
 
