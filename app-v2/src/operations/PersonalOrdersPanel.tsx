@@ -89,7 +89,7 @@ export function PersonalOrdersPanel({ownerId,customers,productColumns,onProductC
    setMessage('تأكد التسليم. الفاتورة '+result.sale.invoiceNumber+' · '+(result.status==='delivered'?'الطلب تسلّم كامل':'باقي تسليم جزئي')+'.');
   },'تسجل التسليم والفاتورة وتحدّث المخزون والحسابات.');
  }
- return <section data-section="orders" className="panel personal-orders-panel">
+ return <section data-section="sales" className="panel personal-orders-panel">
   <div className="panel-heading"><div><h3>الطلبات والتسليم</h3><p>طلب جديد، حجز المخزون، ثم اعتماد البيع عند التسليم فقط</p></div><label className="product-columns-control">البطاقات فالسطر<select aria-label="عدد بطاقات المنتجات في السطر" value={productColumns} onChange={e=>onProductColumnsChange(Number(e.target.value) as 1|2|3)}><option value={1}>1</option><option value={2}>2</option><option value={3}>3</option></select></label></div>
   {error&&<div className="message error" role="alert">{error}</div>}{message&&<div className="message success" role="status">{message}</div>}
   <div className="personal-order-form">
