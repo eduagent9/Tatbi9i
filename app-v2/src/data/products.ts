@@ -106,7 +106,7 @@ export class ProductRepository {
     try{
       const found=await this.db.query('SELECT id FROM products WHERE id=? AND is_active=1',[requiredText(id,'معرّف المنتج')]);
       if(!found.values?.length)throw new Error('المنتج غير موجود أو مؤرشف.');
-      const stock=await this.db.query(`SELECT COALESCE(SUM(sb.quantity),0) AS quantity FROM stock_balances sb JOIN stock_locations sl ON sl.id=sb.location_id WHERE sb.product_id=? AND sl.location_type='depot'`,[id]);
+      const stock=await this.db.query(`SELECT COALESCE(SUM(sb.quantity),0) AS quantity FROM stock_balances sb JOIN stock_locations sl ON sl.id=sb.location_id WHERE sb.product_id=?`,[id]);
       if(Number(stock.values?.[0]?.quantity??0)>0)throw new Error('ما يمكنش أرشفة منتج باقي عندو مخزون؛ صفّي أو حوّل المخزون أولاً.');
       await this.db.run('UPDATE products SET is_active=0,updated_at=? WHERE id=?',[timestamp,id]);
       await this.db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,occurred_at) VALUES (?,?,?,?,?,?)',[crypto.randomUUID(),actorId,'product.archived','product',id,timestamp]);
@@ -121,7 +121,7 @@ export class ProductRepository {
        COALESCE(SUM(sb.quantity),0) AS total_stock,
        (SELECT b.barcode FROM barcodes b WHERE b.product_id=p.id ORDER BY b.id LIMIT 1) AS barcode
        FROM products p
-       LEFT JOIN stock_balances sb ON sb.product_id=p.id AND sb.location_id IN (SELECT id FROM stock_locations WHERE location_type='depot')
+       LEFT JOIN stock_balances sb ON sb.product_id=p.id
        WHERE p.is_active=1
        GROUP BY p.id
        ORDER BY p.name COLLATE NOCASE`,
