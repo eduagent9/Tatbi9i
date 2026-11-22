@@ -10,7 +10,7 @@ function purchaseDb(failMovement=false) {
       if(sql.includes('SELECT id,name,purchase_cost_minor')) return {values:[{id:String(values?.[0]),name:'ماء',purchase_cost_minor:100}]};
       if(sql.includes('SELECT purchase_cost_minor')) return {values:[{purchase_cost_minor:100}]};
       if(sql.includes('SELECT id,quantity FROM stock_balances')) { const key=String(values?.[0])+':'+String(values?.[1])+':'+String(values?.[2]??'null'); const row=balances.get(key); return {values:row?[row]:[]}; }
-      if(sql.includes('SELECT COALESCE(SUM(quantity)')) return {values:[{quantity:Array.from(balances.values()).reduce((n,r)=>n+r.quantity,0)}]};
+      if(sql.includes('SELECT COALESCE(SUM(quantity)') || sql.includes('SELECT COALESCE(SUM(sb.quantity)')) return {values:[{quantity:Array.from(balances.values()).reduce((n,r)=>n+r.quantity,0)}]};
       return {values:[]};
     }),
     run:vi.fn(async(sql:string,values?:unknown[])=>{
