@@ -84,6 +84,7 @@ export default function App() {
   const [catalogGalleryIndex,setCatalogGalleryIndex]=useState(0);
 
   const refresh = useCallback(async (repo: ProductRepository) => setProducts(await repo.list()), []);
+  const visibleProducts=useMemo(()=>products.filter(product=>[product.name,product.category??'',product.subcategory??'',product.barcode??''].some(value=>value.toLowerCase().includes(search.trim().toLowerCase()))),[products,search]);
   useEffect(() => {
     let alive = true;
     openAppDatabase().then(async db => {
@@ -96,12 +97,10 @@ export default function App() {
       const owner=(usersResult.values??[])[0] as unknown as AuthUser|undefined;
       setAuthUsers(owner?[owner]:[]);
       setAuthMode(owner?.pin_hash&&owner?.pin_salt?'login':'setup');
-      setAuthUserId('local-owner');
       await refresh(repo);
       setCustomers(await new CustomerRepository(db).list());
       setOutstandingInvoices(await new PaymentRepository(db).listOutstanding());
       setSuppliers(await new SupplierRepository(db).list());
-      setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
       setExpiryAlerts(await new StockRepository(db).getExpiryAlerts());
       setMovementHistory(await new StockRepository(db).getRecentMovements());
       setFinancialSummary(await new ReportsRepository(db).getFinancialSummary());
