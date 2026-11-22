@@ -110,7 +110,7 @@ jobs:
       - name: Set up Node.js for preview
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
       - name: Build Android-first browser preview
         working-directory: app-v2-source/app-v2
         run: |
