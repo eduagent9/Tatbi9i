@@ -240,3 +240,38 @@ footer{position:static;margin-top:22px}
   .section-view[data-active-section] > section[data-section]{flex-basis:min(48%,620px);width:min(48%,620px);max-width:min(48%,620px)}
   .section-view[data-active-section] > section[data-section="home"]{flex-basis:100%;width:100%;max-width:100%}
 }
+
+
+/* Premium app skin — shared across the native Android application */
+:root{font-family:"Noto Sans Arabic",Tahoma,Arial,sans-serif;color:#1b3040;background:#f4f3ef;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
+body{background:#f4f3ef;color:#1b3040}
+.app-shell{max-width:1320px}
+.topbar{border-color:#e5e6df;padding-bottom:20px}
+.brand-mark{background:linear-gradient(145deg,#1b3b50,#146b5d);box-shadow:0 6px 16px #174c4425}
+.topbar h1,.page-heading h2{color:#1b3040;font-weight:850;letter-spacing:-.45px}
+.eyebrow,.page-heading p{color:#818e8a}
+.panel,.dashboard-shortcuts,.dashboard-metrics article,.dashboard-bottom article,.total-card{background:#fffefa;border-color:#e8e7e1;border-radius:18px;box-shadow:0 5px 18px #1b2b3908}
+.panel{padding:20px}
+.panel-heading h3{color:#20394a;font-weight:800}
+input,select{border-color:#e4e7df;background:#fbfbf7;border-radius:12px}
+input:focus,select:focus{border-color:#4f9682;box-shadow:0 0 0 3px #4f96821c}
+.primary-button{background:linear-gradient(110deg,#176b5d,#20836b);border-radius:12px;box-shadow:0 5px 13px #176b5d20}
+.secondary-button{border-color:#dce5dc;background:#f7f8f3;color:#315f56;border-radius:12px}
+.product-icon{background:#edf3ed;color:#176b5d}
+.product-numbers strong,.finance-grid article strong{color:#176b5d}
+.dashboard-welcome{position:relative;overflow:hidden;border:1px solid #285a58;border-radius:20px;background:radial-gradient(circle at 8% 15%,#ffffff19,transparent 35%),linear-gradient(115deg,#172f43,#174b4b 58%,#176c5b);box-shadow:0 12px 28px #183c3818}
+.dashboard-metrics article{position:relative;gap:9px}
+.dashboard-metrics article strong{color:#1d4d48;font-weight:850}
+.dashboard-shortcuts{padding:18px}
+.shortcut-grid button{border-color:#e9ece6;border-radius:14px;background:#fafaf6;color:#425c5a}
+.shortcut-grid button b{background:#e9f1eb;color:#176b5d;border-radius:12px}
+.main-section-nav{background:rgba(255,254,250,.96);border-color:#e7e7df;box-shadow:0 -7px 24px #20352b0c;backdrop-filter:blur(16px)}
+.main-section-nav button{border-color:#e7e9e2;background:#fafaf6;color:#536b67;border-radius:12px}
+.main-section-nav button.active{background:#176b5d;color:#fff;border-color:#176b5d;box-shadow:0 4px 10px #176b5d25}
+.distribution-subpanel{background:#fbfbf7;border-color:#e8e9e2;border-radius:16px}
+.product-catalog-card{border-color:#e8e8e1;border-radius:16px;box-shadow:0 4px 14px #1b2b3907}
+.product-catalog-image{background:#f0f3ef}
+.finance-grid article{background:#fbfbf7;border-color:#e8e9e2;border-radius:14px}
+.finance-grid .net-profit{background:#eaf3ed;border-color:#d5e5d8}
+.message{border-radius:13px}
+@media(max-width:760px){.panel{padding:15px}.dashboard-welcome{border-radius:17px}.main-section-nav{backdrop-filter:blur(16px)}}
