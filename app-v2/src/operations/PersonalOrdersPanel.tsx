@@ -12,6 +12,8 @@ const labels:Record<PersonalOrderStatus,string>={submitted:'طلب جديد',pre
 
 export function PersonalOrdersPanel({ownerId,customers,productColumns,onProductColumnsChange,onChanged}:{ownerId:string;customers:Customer[];productColumns:1|2|3;onProductColumnsChange:(value:1|2|3)=>void;onChanged?:()=>void|Promise<void>}){
  const [products,setProducts]=useState<Product[]>([]);
+ const [locations,setLocations]=useState<Array<{id:string;label:string}>>([]);
+ const [locationId,setLocationId]=useState('loc-depot-main');
  const [orders,setOrders]=useState<Order[]>([]);
  const [lines,setLines]=useState<Record<string,Line[]>>({});
  const [cart,setCart]=useState<Record<string,string>>({});
@@ -29,12 +31,13 @@ export function PersonalOrdersPanel({ownerId,customers,productColumns,onProductC
 
  const load=useCallback(async()=>{
   const db=await openAppDatabase();
-  const [p,o]=await Promise.all([
+  const [loc,p,o]=await Promise.all([
+   db.query("SELECT id,label FROM stock_locations WHERE is_active=1 ORDER BY CASE location_type WHEN 'depot' THEN 0 ELSE 1 END,label"),
    db.query(`SELECT p.id,p.name,p.category,p.image_data_uri,p.sale_price_minor,p.barcode,
     MAX(0,COALESCE(SUM(sb.quantity),0)-COALESCE((SELECT SUM(r.quantity-r.fulfilled_quantity) FROM sales_order_reservations r
-      WHERE r.product_id=p.id AND r.location_id='loc-depot-main' AND r.status='active'),0)) AS total_stock
-    FROM products p LEFT JOIN stock_balances sb ON sb.product_id=p.id AND sb.location_id='loc-depot-main'
-    WHERE p.is_active=1 GROUP BY p.id ORDER BY p.name COLLATE NOCASE`),
+      WHERE r.product_id=p.id AND r.location_id=? AND r.status='active'),0)) AS total_stock
+    FROM products p LEFT JOIN stock_balances sb ON sb.product_id=p.id AND sb.location_id=?
+    WHERE p.is_active=1 GROUP BY p.id ORDER BY p.name COLLATE NOCASE`,[locationId,locationId]),
    db.query(`SELECT o.id,o.order_number,o.customer_id,c.name AS customer_name,o.status,o.total_minor,o.created_at
     FROM sales_orders o JOIN customers c ON c.id=o.customer_id ORDER BY o.created_at DESC LIMIT 100`)
   ]);
@@ -46,11 +49,12 @@ export function PersonalOrdersPanel({ownerId,customers,productColumns,onProductC
     FROM sales_order_lines sol WHERE sol.order_id=? ORDER BY sol.rowid`,[order.id]);
    return [order.id,(r.values??[]) as unknown as Line[]] as const;
   }));
+  setLocations((loc.values??[]) as unknown as Array<{id:string;label:string}>);
   setProducts((p.values??[]) as unknown as Product[]);
   setOrders(orderRows);
   setLines(Object.fromEntries(lineEntries));
   setDeliveryQty(current=>{const next={...current};for(const [id,rows] of lineEntries)for(const line of rows)next[id+':'+line.id]??=String(line.remaining_quantity);return next;});
- },[]);
+ },[locationId]);
  useEffect(()=>{load().catch(e=>setError(e instanceof Error?e.message:'تعذر تحميل الطلبات والمنتجات.'));},[load]);
 
  const cartRows=useMemo(()=>Object.entries(cart).filter(([,q])=>Number(q)>0).map(([id,q])=>({product:products.find(p=>p.id===id),quantity:Number(q)})).filter((x):x is {product:Product;quantity:number}=>!!x.product),[cart,products]);
@@ -70,7 +74,7 @@ export function PersonalOrdersPanel({ownerId,customers,productColumns,onProductC
   if(!cartRows.length)throw new Error('زيد منتج واحد على الأقل للطلب.');
   const db=await openAppDatabase();
   const repo=new PersonalOrdersRepository(db);
-  const result=await repo.create({id:crypto.randomUUID(),orderNumber:'CMD-'+Date.now(),customerId,ownerId,locationId:'loc-depot-main',
+  const result=await repo.create({id:crypto.randomUUID(),orderNumber:'CMD-'+Date.now(),customerId,ownerId,locationId,
    lines:cartRows.map(x=>({productId:x.product.id,quantity:x.quantity})),discountMinor:madToMinorUnits(Number(discount)),note});
   setCart({});setDiscount('0');setNote('');setCustomerId('');
   setMessage('تسجل الطلب '+result.orderNumber+' وتحجز المخزون المتاح.');
@@ -93,6 +97,7 @@ export function PersonalOrdersPanel({ownerId,customers,productColumns,onProductC
   <div className="panel-heading"><div><h3>الطلبات والتسليم</h3><p>طلب جديد، حجز المخزون، ثم اعتماد البيع عند التسليم فقط</p></div><label className="product-columns-control">البطاقات فالسطر<select aria-label="عدد بطاقات المنتجات في السطر" value={productColumns} onChange={e=>onProductColumnsChange(Number(e.target.value) as 1|2|3)}><option value={1}>1</option><option value={2}>2</option><option value={3}>3</option></select></label></div>
   {error&&<div className="message error" role="alert">{error}</div>}{message&&<div className="message success" role="status">{message}</div>}
   <div className="personal-order-form">
+   <label>مكان البيع<select value={locationId} onChange={e=>{setLocationId(e.target.value);setCart({});}}>{locations.map(location=><option key={location.id} value={location.id}>{location.label}</option>)}</select></label>
    <label>الزبون<select required value={customerId} onChange={e=>setCustomerId(e.target.value)}><option value="">اختار الزبون</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
    <div className="personal-product-grid" style={{gridTemplateColumns:`repeat(${productColumns},minmax(0,1fr))`}}>{products.map(product=><article className="personal-product-card" key={product.id}>
     <div className="personal-product-image" role="button" tabIndex={0} aria-label={'عرض صور '+product.name} onClick={()=>openGallery(product)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openGallery(product);}}}>{product.image_data_uri?<img src={product.image_data_uri} alt={product.name}/>:<div className="personal-product-placeholder">صورة المنتج</div>}
