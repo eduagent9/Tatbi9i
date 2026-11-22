@@ -102,6 +102,24 @@ jobs:
           console.log('Business logic checks passed: expiry dates, monthly date parsing, POS cart quantities, and discount boundaries.');
           console.log('Static checks passed: JavaScript syntax, unique HTML IDs, core workflows and PWA install assets.');
           NODE
+      - name: Checkout Android-first preview branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase2/personal-business-mode
+          path: app-v2-source
+      - name: Set up Node.js for preview
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build Android-first browser preview
+        working-directory: app-v2-source/app-v2
+        run: |
+          npm install
+          npm run build
+      - name: Place preview beside the existing website
+        run: |
+          mkdir -p preview
+          cp -R app-v2-source/app-v2/dist/. preview/
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
