@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - phase1/technical-foundation
+      - phase2/distribution-completion
+      - phase2/quality-hardening
     paths:
       - 'app-v2/**'
       - '.github/workflows/android-v2.yml'
