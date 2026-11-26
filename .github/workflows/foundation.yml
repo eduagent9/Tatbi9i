@@ -92,6 +92,7 @@ jobs:
               pass
           else:
               raise AssertionError('delivery_proofs accepted an unsupported result value')
+          db.commit()
           db.execute('PRAGMA foreign_keys = ON')
           assert db.execute('PRAGMA foreign_keys').fetchone()[0] == 1
           owner = db.execute("SELECT id, role FROM users WHERE id='local-owner'").fetchone()
