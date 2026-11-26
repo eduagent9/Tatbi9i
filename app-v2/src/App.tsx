@@ -19,7 +19,7 @@ import { DistributionOperationsPanel } from './operations/DistributionOperations
 import { InvoiceArchivePanel } from './operations/InvoiceArchivePanel';
 import { ProductCardPicker } from './operations/ProductCardPicker';
 import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
-import {translate,type AppLanguage} from './data/i18n';
+import {translate,type AppLanguage,type TranslationKey} from './data/i18n';
 import BrowserPreview from './BrowserPreview';
 import { Capacitor } from '@capacitor/core';
 
@@ -30,7 +30,7 @@ type CashSessionRow = { id:string; user_id:string; user_name:string; vehicle_lab
 type TeamUser = { id:string; display_name:string; phone:string|null; role:'owner'|'depot_manager'|'order_rep'|'van_sales'|'delivery_driver'; is_active:number };
 type AuthUser = TeamUser & { pin_salt:string|null; pin_hash:string|null };
 type TeamVehicle = { id:string; code:string; label:string; vehicle_type:'van_sales'|'delivery'; assigned_user_id:string|null; assigned_name:string|null };
-const roleLabels:Record<TeamUser['role'],string>={owner:'المالك',depot_manager:'مسؤول الديبو',order_rep:'مندوب الطلبات',van_sales:'مندوب البيع بالسيارة',delivery_driver:'السائق'};
+const roleLabels:Record<TeamUser['role'],TranslationKey>={owner:'owner',depot_manager:'depot_manager',order_rep:'order_rep',van_sales:'van_sales',delivery_driver:'delivery_driver'};
 
 export default function App() {
   const [repository, setRepository] = useState<ProductRepository | null>(null);
@@ -760,7 +760,7 @@ export default function App() {
       </section>}
 
       {!loading&&!currentUser&&authMode==='setup'&&<section className="panel auth-panel"><div className="panel-heading"><div><h3>إعداد دخول المالك</h3><p>أول مرة خاصك تختار رمز PIN خاص بالمالك. غادي يتخزن كـ hash مملح، ماشي كنص واضح.</p></div></div><form onSubmit={setupOwnerPin}><label>رمز PIN (4 إلى 8 أرقام)<input type="password" inputMode="numeric" autoComplete="new-password" maxLength={8} required value={setupPin} onChange={e=>setSetupPin(e.target.value)} /></label><label>تأكيد رمز PIN<input type="password" inputMode="numeric" autoComplete="new-password" maxLength={8} required value={setupPinConfirm} onChange={e=>setSetupPinConfirm(e.target.value)} /></label><button className="primary-button" disabled={saving}>{saving?'كيتم الإعداد...':'حفظ رمز المالك والدخول'}</button></form></section>}
-      {!loading&&!currentUser&&authMode==='login'&&<section className="panel auth-panel"><div className="panel-heading"><div><h3>تسجيل الدخول</h3><p>اختار المستخدم ودخل رمز PIN ديالو.</p></div></div><form onSubmit={loginUser}><label>المستخدم<select required value={authUserId} onChange={e=>setAuthUserId(e.target.value)}>{authUsers.filter(user=>user.is_active===1&&user.pin_hash&&user.pin_salt).map(user=><option key={user.id} value={user.id}>{user.display_name} · {roleLabels[user.role]}</option>)}</select></label><label>رمز PIN<input type="password" inputMode="numeric" autoComplete="current-password" maxLength={8} required value={authPin} onChange={e=>setAuthPin(e.target.value)} /></label><button className="primary-button" disabled={saving}>{saving?'كيتم التحقق...':'دخول'}</button></form></section>}
+      {!loading&&!currentUser&&authMode==='login'&&<section className="panel auth-panel"><div className="panel-heading"><div><h3>تسجيل الدخول</h3><p>اختار المستخدم ودخل رمز PIN ديالو.</p></div></div><form onSubmit={loginUser}><label>المستخدم<select required value={authUserId} onChange={e=>setAuthUserId(e.target.value)}>{authUsers.filter(user=>user.is_active===1&&user.pin_hash&&user.pin_salt).map(user=><option key={user.id} value={user.id}>{user.display_name} · {tr(roleLabels[user.role])}</option>)}</select></label><label>رمز PIN<input type="password" inputMode="numeric" autoComplete="current-password" maxLength={8} required value={authPin} onChange={e=>setAuthPin(e.target.value)} /></label><button className="primary-button" disabled={saving}>{saving?'كيتم التحقق...':'دخول'}</button></form></section>}
       {currentUser?.role==='order_rep'&&repository&&<div className="content-grid">
         <section data-section="management" className="panel team-panel">
           <div className="panel-heading"><div><h3>تسجيل طلب محل</h3><p>سجل الكميات المطلوبة من المحل وأرسلها للديبو للتحضير</p></div><span className="step-mark">طلب جديد</span></div>
@@ -824,7 +824,7 @@ export default function App() {
           <div className="section-divider"></div><h4>تسليم النقدية للديبو</h4>
           <form onSubmit={submitCashHandover}>
             <label>جلسة التحصيل<select required value={handoverSessionId} onChange={e=>setHandoverSessionId(e.target.value)}><option value="">اختار عهدتك المفتوحة</option>{cashSessions.filter(session=>session.status==='open'&&session.user_id===currentUser.id).map(session=><option key={session.id} value={session.id}>{session.vehicle_label||'السيارة'} · باقي {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</option>)}</select></label>
-            <label>المستلم فالديبو<select required value={handoverReceiverId} onChange={e=>setHandoverReceiverId(e.target.value)}><option value="">اختار المستلم</option>{teamUsers.filter(user=>user.is_active===1&&(user.role==='owner'||user.role==='depot_manager')).map(user=><option key={user.id} value={user.id}>{user.display_name} · {roleLabels[user.role]}</option>)}</select></label>
+            <label>المستلم فالديبو<select required value={handoverReceiverId} onChange={e=>setHandoverReceiverId(e.target.value)}><option value="">اختار المستلم</option>{teamUsers.filter(user=>user.is_active===1&&(user.role==='owner'||user.role==='depot_manager')).map(user=><option key={user.id} value={user.id}>{user.display_name} · {tr(roleLabels[user.role])}</option>)}</select></label>
             <label>المبلغ المسلم (DH)<input required type="number" min="0.01" step="0.01" value={handoverAmount} onChange={e=>setHandoverAmount(e.target.value)}/></label>
             <button className="primary-button" disabled={saving||cashSessions.every(session=>session.status!=='open'||session.user_id!==currentUser.id)}>تأكيد التسليم وإصدار الوصل</button>
           </form>
@@ -838,7 +838,7 @@ export default function App() {
         <section className="panel team-panel"><div className="panel-heading"><div><h3>تسليم النقدية للديبو</h3><p>سلم المبلغ اللي جمعتي وخذ وصل التسليم</p></div></div>
           <form onSubmit={submitCashHandover}>
             <label>جلسة التحصيل<select required value={handoverSessionId} onChange={e=>setHandoverSessionId(e.target.value)}><option value="">اختار عهدتك المفتوحة</option>{cashSessions.filter(session=>session.status==='open'&&session.user_id===currentUser.id).map(session=><option key={session.id} value={session.id}>{session.vehicle_label||'السيارة'} · باقي {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</option>)}</select></label>
-            <label>المستلم فالديبو<select required value={handoverReceiverId} onChange={e=>setHandoverReceiverId(e.target.value)}><option value="">اختار المستلم</option>{teamUsers.filter(user=>user.is_active===1&&(user.role==='owner'||user.role==='depot_manager')).map(user=><option key={user.id} value={user.id}>{user.display_name} · {roleLabels[user.role]}</option>)}</select></label>
+            <label>المستلم فالديبو<select required value={handoverReceiverId} onChange={e=>setHandoverReceiverId(e.target.value)}><option value="">اختار المستلم</option>{teamUsers.filter(user=>user.is_active===1&&(user.role==='owner'||user.role==='depot_manager')).map(user=><option key={user.id} value={user.id}>{user.display_name} · {tr(roleLabels[user.role])}</option>)}</select></label>
             <label>المبلغ المسلم (DH)<input required type="number" min="0.01" step="0.01" value={handoverAmount} onChange={e=>setHandoverAmount(e.target.value)}/></label>
             <button className="primary-button" disabled={saving||cashSessions.every(session=>session.status!=='open'||session.user_id!==currentUser.id)}>تأكيد التسليم وإصدار الوصل</button>
           </form>
@@ -889,7 +889,7 @@ export default function App() {
             <button className="secondary-button" disabled={saving}>{saving?"كيتم الحفظ...":"إضافة عضو للفريق"}</button>
           </form>
           <div className="team-list"><h4>الأعضاء المسجلون</h4>
-            {teamUsers.map(user=><article className="team-row" key={user.id}><div><strong>{user.display_name}</strong><span>{roleLabels[user.role]} · {user.phone||"بدون هاتف"}</span></div><span className={user.is_active?"team-active":"team-inactive"}>{user.is_active?"نشط":"موقوف"}</span></article>)}
+            {teamUsers.map(user=><article className="team-row" key={user.id}><div><strong>{user.display_name}</strong><span>{tr(roleLabels[user.role])} · {user.phone||"بدون هاتف"}</span></div><span className={user.is_active?"team-active":"team-inactive"}>{user.is_active?"نشط":"موقوف"}</span></article>)}
           </div>
           <div className="section-divider"></div>
           <div className="team-list"><h4>السيارات والمسؤولون عنها</h4>
@@ -1027,7 +1027,7 @@ export default function App() {
           <div className="panel-heading"><div><h3>تسليم نقدية المبيعات للديبو</h3><p>تتبع المبالغ اللي جمعها السائق وإصدار وصل عند تسليمها للمالك أو مسؤول الديبو</p></div><span className="step-mark">النقدية</span></div>
           <form onSubmit={submitCashHandover}>
             <label>السائق / جلسة التحصيل<select required value={handoverSessionId} onChange={e=>setHandoverSessionId(e.target.value)}><option value="">اختار جلسة مفتوحة</option>{cashSessions.filter(session=>session.status==='open').map(session=><option key={session.id} value={session.id}>{session.user_name} · {session.vehicle_label||'بدون سيارة'} · باقي {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</option>)}</select></label>
-            <label>المستلم فالديبو<select required value={handoverReceiverId} onChange={e=>setHandoverReceiverId(e.target.value)}><option value="">اختار المستلم</option>{teamUsers.filter(user=>user.is_active===1&&(user.role==='owner'||user.role==='depot_manager')).map(user=><option key={user.id} value={user.id}>{user.display_name} · {roleLabels[user.role]}</option>)}</select></label>
+            <label>المستلم فالديبو<select required value={handoverReceiverId} onChange={e=>setHandoverReceiverId(e.target.value)}><option value="">اختار المستلم</option>{teamUsers.filter(user=>user.is_active===1&&(user.role==='owner'||user.role==='depot_manager')).map(user=><option key={user.id} value={user.id}>{user.display_name} · {tr(roleLabels[user.role])}</option>)}</select></label>
             <label>المبلغ المسلم (DH)<input required type="number" min="0.01" step="0.01" value={handoverAmount} onChange={e=>setHandoverAmount(e.target.value)} /></label>
             <button className="primary-button" disabled={saving||cashSessions.every(session=>session.status!=='open')||teamUsers.every(user=>user.is_active!==1||(user.role!=='owner'&&user.role!=='depot_manager'))}>تأكيد تسليم النقدية وإصدار الوصل</button>
           </form>
