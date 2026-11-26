@@ -187,6 +187,12 @@ class CapacitorSqliteFactory implements SqliteConnectionFactory {
       await connection.execute('DROP TABLE __tatbiqi_encryption_probe;');
     }
 
+    // Flush encrypted pages from the WAL before asking the plugin to inspect the
+    // database file. Otherwise a brand-new database can have cipher_version=4
+    // while its most recent encrypted pages are still only present in the WAL,
+    // causing isDatabaseEncrypted() to report a false negative on first launch.
+    await connection.execute('PRAGMA wal_checkpoint(TRUNCATE);');
+
     const encryptedAfter = (await this.sqlite.isDatabaseEncrypted(name)).result;
     if (!encryptedAfter) {
       let cipherVersion = 'unavailable';
