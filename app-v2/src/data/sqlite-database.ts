@@ -47,7 +47,7 @@ export function createSqliteExecutor(connection: NativeSqliteConnection): Sqlite
 
 export interface EncryptionStateInspector {
   closeConnection(name: string, readonly: boolean): Promise<void>;
-  isDatabaseEncrypted(name: string): Promise<{ result: boolean }>;
+  isDatabaseEncrypted(name: string): Promise<{ result?: boolean }>;
 }
 
 /**
@@ -59,7 +59,7 @@ export async function verifyDatabaseEncryptionAfterClose(
   name: string,
 ): Promise<boolean> {
   await inspector.closeConnection(name, false);
-  return (await inspector.isDatabaseEncrypted(name)).result;
+  return (await inspector.isDatabaseEncrypted(name)).result === true;
 }
 
 export interface SqliteConnectionFactory {
