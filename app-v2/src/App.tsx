@@ -909,7 +909,7 @@ export default function App() {
               </article>;
             })}
           </div>
-          <p className="hint">هاد الجزء كيسجل الفريق وتعيين السيارات فقط؛ تسجيل الدخول وفرض الصلاحيات على العمليات مازال خاصهم يتكملو قبل الاستعمال الحقيقي.</p>
+          <p className="hint">تسجيل الدخول محمي برمز PIN، والصلاحيات كتتحدد حسب الدور. قبل الاستعمال التجاري، خاص تجربة كل دور والعمليات ديالو على هاتف حقيقي.</p>
         </section>
         <section id="inventory-section" data-section="inventory" className="panel form-panel"><div className="panel-heading"><div><h3>إضافة منتج</h3><p>المبالغ بالدرهم المغربي</p></div><span className="step-mark">01</span></div>
           <form onSubmit={submit}>
