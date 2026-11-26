@@ -45,6 +45,23 @@ export function createSqliteExecutor(connection: NativeSqliteConnection): Sqlite
   };
 }
 
+export interface EncryptionStateInspector {
+  closeConnection(name: string, readonly: boolean): Promise<void>;
+  isDatabaseEncrypted(name: string): Promise<{ result: boolean }>;
+}
+
+/**
+ * The native plugin inspects the database file on disk. Close the connection
+ * first so SQLite checkpoints any pending WAL pages before the file is inspected.
+ */
+export async function verifyDatabaseEncryptionAfterClose(
+  inspector: EncryptionStateInspector,
+  name: string,
+): Promise<boolean> {
+  await inspector.closeConnection(name, false);
+  return (await inspector.isDatabaseEncrypted(name)).result;
+}
+
 export interface SqliteConnectionFactory {
   open(name: string): Promise<SqliteExecutor>;
   close(name: string): Promise<void>;
@@ -171,11 +188,9 @@ class CapacitorSqliteFactory implements SqliteConnectionFactory {
 
     await connection.open();
 
-    // A freshly opened SQLite database may not have any persisted page yet.
-    // SQLCipher's database-state detector can therefore report UNENCRYPTED
-    // until the first page is written. The plugin's own encryption guide
-    // verifies a new database only after creating its first table and rows.
-    // Write and remove a private probe before checking; no business data is touched.
+    // A new SQLCipher database has no page to inspect until the first write.
+    // Keep a tiny private marker table so the encrypted database has durable
+    // content before checking its on-disk state.
     if (!exists) {
       await connection.execute(
         'CREATE TABLE IF NOT EXISTS __tatbiqi_encryption_probe (id INTEGER PRIMARY KEY, value TEXT NOT NULL);',
@@ -184,25 +199,37 @@ class CapacitorSqliteFactory implements SqliteConnectionFactory {
         'INSERT OR REPLACE INTO __tatbiqi_encryption_probe (id, value) VALUES (?, ?);',
         [1, 'sqlcipher-check'],
       );
-      await connection.execute('DROP TABLE __tatbiqi_encryption_probe;');
     }
 
-    const encryptedAfter = (await this.sqlite.isDatabaseEncrypted(name)).result;
+    let cipherVersion = 'unavailable';
+    try {
+      const cipherInfo = await connection.query('PRAGMA cipher_version;');
+      const first = cipherInfo.values?.[0];
+      cipherVersion = String(first?.cipher_version ?? Object.values(first ?? {})[0] ?? 'unavailable');
+    } catch {
+      // The SQLCipher version is diagnostic only; the file-state check decides.
+    }
+
+    // isDatabaseEncrypted inspects the database file, not the live connection.
+    // Closing first forces SQLite to flush/checkpoint pending pages (including
+    // WAL content) before the native plugin classifies the file.
+    const encryptedAfter = await verifyDatabaseEncryptionAfterClose(this.sqlite, name);
     if (!encryptedAfter) {
-      let cipherVersion = 'unavailable';
-      try {
-        const cipherInfo = await connection.query('PRAGMA cipher_version;');
-        const first = cipherInfo.values?.[0];
-        cipherVersion = String(first?.cipher_version ?? Object.values(first ?? {})[0] ?? 'unavailable');
-      } catch {
-        // The original encryption check remains the deciding safety condition.
-      }
-      await this.sqlite.closeConnection(name, false).catch(() => undefined);
       throw new Error(
         `تعذر تأكيد تشفير قاعدة البيانات؛ أوقفنا فتحها لحماية بياناتك. التشخيص: config=${encryptionConfigured}, existed=${exists}, encryptedBefore=${encryptedBefore}, encryptedAfter=${encryptedAfter}, cipherVersion=${cipherVersion}, mode=${mode}. لم نحذف قاعدة البيانات.`,
       );
     }
-    return createSqliteExecutor(connection as unknown as NativeSqliteConnection);
+
+    // The first connection may have used "encryption" for a legacy plaintext
+    // database. Reopen only with "secret" after the on-disk encryption check
+    // has passed, so all subsequent reads/writes use the stored SQLCipher key.
+    const verifiedConnection = await this.sqlite.createConnection(name, true, 'secret', 1, false);
+    await verifiedConnection.open();
+    if (!exists) {
+      // The private marker is intentionally retained as a tiny internal table:
+      // it ensures a brand-new database is non-empty before app migrations run.
+    }
+    return createSqliteExecutor(verifiedConnection as unknown as NativeSqliteConnection);
   }
 
   async close(name: string): Promise<void> {
