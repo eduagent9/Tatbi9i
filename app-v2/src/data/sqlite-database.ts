@@ -14,6 +14,7 @@ import invoiceBatchAllocationsSchema from './migrations/008_invoice_batch_alloca
 import userPinAuthSchema from './migrations/009_user_pin_auth.sql?raw';
 import distributionOperationsSchema from './migrations/010_distribution_operations.sql?raw';
 import variantVehicleCountsSchema from './migrations/011_variant_vehicle_counts.sql?raw';
+import deliveryProofInvoiceLinkSchema from './migrations/012_delivery_proof_invoice_link.sql?raw';
 
 export interface SqliteExecutor {
   execute(statement: string): Promise<unknown>;
@@ -68,6 +69,7 @@ export const APP_MIGRATIONS: Migration[] = [
   { version: 9, name: 'user_pin_auth', sql: userPinAuthSchema },
   { version: 10, name: 'distribution_operations', sql: distributionOperationsSchema },
   { version: 11, name: 'variant_vehicle_counts', sql: variantVehicleCountsSchema },
+  { version: 12, name: 'delivery_proof_invoice_link', sql: deliveryProofInvoiceLinkSchema },
 ];
 
 export async function applyMigrations(

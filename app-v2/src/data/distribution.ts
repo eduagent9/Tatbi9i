@@ -105,7 +105,17 @@ export class DistributionRepository {
       if(!stop||String(stop.driver_user_id)!==input.driverId||String(stop.route_status)!=='started')throw new Error('المحطة ماشي ضمن جولة نشيطة ديالك.');
       if(!['pending','arrived'].includes(String(stop.status)))throw new Error('المحطة تسجلات من قبل؛ ما يمكنش نعاودو نسجلوها.');
       const proofResult=toDeliveryProofResult(input.status);
-      await this.db.run('INSERT INTO delivery_proofs (id,route_stop_id,order_id,driver_user_id,result,recipient_name,signature_local_uri,photo_local_uri,latitude,longitude,note,captured_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',[input.id,input.stopId,stop.order_id??null,input.driverId,proofResult,input.recipientName?.trim()||null,input.signatureUri??null,input.photoUri??null,input.latitude??null,input.longitude??null,input.note?.trim()||null,now,now]);
+      let invoiceId:string|null=null;
+      if(stop.order_id&&['delivered','partially_delivered'].includes(input.status)){
+        const linkedInvoice=await this.db.query(`SELECT i.id,COUNT(sm.id) AS stock_movement_count
+          FROM invoices i LEFT JOIN stock_movements sm ON sm.reference_type='invoice' AND sm.reference_id=i.id
+          WHERE i.order_id=? AND i.status<>'voided'
+          GROUP BY i.id ORDER BY i.created_at DESC LIMIT 1`,[stop.order_id]);
+        const invoice=linkedInvoice.values?.[0];
+        if(!invoice||Number(invoice.stock_movement_count??0)<1)throw new Error('خاصك تصدر فاتورة التسليم وتخصم مخزون السيارة قبل حفظ إثبات التسليم؛ ما لقيناش فاتورة مرتبطة بحركة المخزون.');
+        invoiceId=String(invoice.id);
+      }
+      await this.db.run('INSERT INTO delivery_proofs (id,route_stop_id,order_id,invoice_id,driver_user_id,result,recipient_name,signature_local_uri,photo_local_uri,latitude,longitude,note,captured_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[input.id,input.stopId,stop.order_id??null,invoiceId,input.driverId,proofResult,input.recipientName?.trim()||null,input.signatureUri??null,input.photoUri??null,input.latitude??null,input.longitude??null,input.note?.trim()||null,now,now]);
       await this.db.run('UPDATE delivery_route_stops SET status=?,completed_at=?,failure_reason=?,notes=? WHERE id=?',[input.status,now,input.failureReason?.trim()||null,input.note?.trim()||null,input.stopId]);
       await this.db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[this.makeId(),input.driverId,'route.stop_recorded','delivery_route_stop',input.stopId,JSON.stringify({status:input.status,proofId:input.id}),now]);
       await this.db.commitTransaction();

@@ -128,19 +128,34 @@ describe('DistributionRepository',()=>{
    const repo=new DistributionRepository(db,()=> '2026-11-22T12:00:00.000Z',()=> 'generated');
    await repo.recordStop({id:'proof1',stopId:'stop1',driverId:'driver1',status,failureReason:'المحل مغلق'});
    const proofInsert=vi.mocked(db.run).mock.calls.find(([sql])=>sql.includes('INSERT INTO delivery_proofs'));
-   expect(proofInsert?.[1]?.[4]).toBe('not_available');
+   expect(proofInsert?.[1]?.[5]).toBe('not_available');
    expect(db.commitTransaction).toHaveBeenCalledOnce();
   }
  });
- it('maps partially delivered route outcomes to the allowed partial proof result',async()=>{
-  const db=makeDb(sql=>sql.includes('FROM delivery_route_stops s JOIN delivery_routes r')?[{
-   id:'stop1',route_id:'route1',order_id:'order1',status:'pending',driver_user_id:'driver1',route_status:'started'
-  }]:[]);
+ it('maps partially delivered route outcomes to the allowed partial proof result and links the invoice with its stock movement',async()=>{
+  const db=makeDb(sql=>{
+   if(sql.includes('FROM delivery_route_stops s JOIN delivery_routes r'))return [{id:'stop1',route_id:'route1',order_id:'order1',status:'pending',driver_user_id:'driver1',route_status:'started'}];
+   if(sql.includes('FROM invoices i LEFT JOIN stock_movements'))return [{id:'invoice1',stock_movement_count:2}];
+   return [];
+  });
   const repo=new DistributionRepository(db,()=> '2026-11-22T12:00:00.000Z',()=> 'generated');
   await repo.recordStop({id:'proof1',stopId:'stop1',driverId:'driver1',status:'partially_delivered',recipientName:'المستلم'});
   const proofInsert=vi.mocked(db.run).mock.calls.find(([sql])=>sql.includes('INSERT INTO delivery_proofs'));
-  expect(proofInsert?.[1]?.[4]).toBe('partial');
+  expect(proofInsert?.[1]?.[3]).toBe('invoice1');
+  expect(proofInsert?.[1]?.[5]).toBe('partial');
   expect(db.commitTransaction).toHaveBeenCalledOnce();
+ });
+
+ it('refuses a delivered proof when no invoice-backed stock movement exists',async()=>{
+  const db=makeDb(sql=>{
+   if(sql.includes('FROM delivery_route_stops s JOIN delivery_routes r'))return [{id:'stop1',route_id:'route1',order_id:'order1',status:'pending',driver_user_id:'driver1',route_status:'started'}];
+   if(sql.includes('FROM invoices i LEFT JOIN stock_movements'))return [];
+   return [];
+  });
+  const repo=new DistributionRepository(db);
+  await expect(repo.recordStop({id:'proof1',stopId:'stop1',driverId:'driver1',status:'delivered',recipientName:'المستلم'})).rejects.toThrow('خاصك تصدر فاتورة التسليم');
+  expect(db.rollbackTransaction).toHaveBeenCalledOnce();
+  expect(db.commitTransaction).not.toHaveBeenCalled();
  });
 
 });
