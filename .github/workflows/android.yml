@@ -45,17 +45,17 @@ jobs:
 
           path = Path('android/app/src/main/AndroidManifest.xml')
           manifest = path.read_text(encoding='utf-8')
-          camera_permission = '    <uses-permission android:name="android.permission.CAMERA" />\\n'
+          camera_permission = '    <uses-permission android:name="android.permission.CAMERA" />\n'
           if 'android.permission.CAMERA' not in manifest:
               manifest = manifest.replace('<application', camera_permission + '<application', 1)
 
-          mlkit_metadata = '        <meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" android:value="barcode_ui" />\\n'
+          mlkit_metadata = '        <meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" android:value="barcode_ui" />\n'
           if 'com.google.mlkit.vision.DEPENDENCIES' not in manifest:
-              application_tag = re.search(r'<application\\b[^>]*>', manifest, re.DOTALL)
+              application_tag = re.search(r'<application\b[^>]*>', manifest, re.DOTALL)
               if not application_tag:
                   raise SystemExit('AndroidManifest.xml has no application tag.')
               insert_at = application_tag.end()
-              manifest = manifest[:insert_at] + '\\n' + mlkit_metadata + manifest[insert_at:]
+              manifest = manifest[:insert_at] + '\n' + mlkit_metadata + manifest[insert_at:]
 
           path.write_text(manifest, encoding='utf-8')
           print('Camera permission and ML Kit barcode dependency metadata are configured.')
