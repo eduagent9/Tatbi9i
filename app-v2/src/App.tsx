@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { formatMad, formatSignedMad, madToMinorUnits } from './data/money';
 import { hashPin, isValidPin, verifyPin } from './data/auth';
 import { canPerform, type AppPermission } from './data/permissions';
@@ -100,6 +100,7 @@ export default function App() {
   const [stockDirection, setStockDirection] = useState<'in' | 'out'>('in');
   const [stockOutType, setStockOutType] = useState<'delivery' | 'damage' | 'supplier_return'>('delivery');
   const [barcodeScanning,setBarcodeScanning]=useState(false);
+  const barcodeListenerRef=useRef<Awaited<ReturnType<typeof BarcodeScanner.addListener>>|null>(null);
   const [activeSection,setActiveSection]=useState<'home'|'sales'|'inventory'|'distribution'|'purchases'|'relations'|'management'|'settings'>('home');
   const [language,setLanguage]=useState<AppLanguage>(()=>{const saved=localStorage.getItem('tatbiqi.language');return saved==='fr'||saved==='en'?saved:'ar';});
   useEffect(()=>{localStorage.setItem('tatbiqi.language',language);document.documentElement.lang=language;document.documentElement.dir=language==='ar'?'rtl':'ltr';},[language]);
@@ -152,7 +153,7 @@ export default function App() {
       setBarcodeScanning(true);
       listener=await BarcodeScanner.addListener('barcodesScanned',async event=>{
         const value=event.barcodes[0]?.rawValue?.trim();
-        await listener?.remove();listener=null;
+        await listener?.remove();listener=null;barcodeListenerRef.current=null;
         await BarcodeScanner.stopScan().catch(()=>undefined);
         document.body.classList.remove('barcode-scanner-active');setBarcodeScanning(false);
         if(value){
@@ -169,15 +170,19 @@ export default function App() {
           }
         }else setError('تقرا الرمز ولكن القيمة ديالو ما واضحةش؛ عاود المحاولة.');
       });
+      barcodeListenerRef.current=listener;
       await BarcodeScanner.startScan({formats:[BarcodeFormat.Ean13,BarcodeFormat.Ean8,BarcodeFormat.UpcA,BarcodeFormat.UpcE,BarcodeFormat.Code128,BarcodeFormat.Code39,BarcodeFormat.Itf]});
     }catch(reason){
-      await listener?.remove().catch(()=>undefined);
+      await listener?.remove().catch(()=>undefined);barcodeListenerRef.current=null;
       await BarcodeScanner.stopScan().catch(()=>undefined);
       document.body.classList.remove('barcode-scanner-active');setBarcodeScanning(false);
       setError(reason instanceof Error?reason.message:'تعذر تشغيل قارئ الباركود. تأكد من صلاحية الكاميرا.');
     }
   }
   async function stopBarcodeScan(){
+    const listener=barcodeListenerRef.current;
+    barcodeListenerRef.current=null;
+    await listener?.remove().catch(()=>undefined);
     await BarcodeScanner.stopScan().catch(()=>undefined);
     document.body.classList.remove('barcode-scanner-active');setBarcodeScanning(false);
   }
