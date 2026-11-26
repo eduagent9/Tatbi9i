@@ -299,3 +299,8 @@ input:focus,select:focus{border-color:#4f9682;box-shadow:0 0 0 3px #4f96821c}
 .app-shell{padding-bottom:calc(112px + env(safe-area-inset-bottom,0px))}
 @media(min-width:761px){.main-section-nav{bottom:18px;width:min(700px,calc(100% - 40px))}.main-section-nav button{min-height:58px}.main-section-nav button .nav-label{font-size:10px}}
 @media(max-width:420px){.main-section-nav{width:calc(100% - 16px);bottom:calc(7px + env(safe-area-inset-bottom,0px));gap:2px;padding:7px 5px;border-radius:19px}.main-section-nav button{min-height:51px;border-radius:13px}.main-section-nav button .nav-icon{font-size:19px;width:25px}.main-section-nav button .nav-label{font-size:8px}.app-shell{padding-bottom:calc(105px + env(safe-area-inset-bottom,0px))}}
+
+/* Role-aware navigation: quick access for depot, van-sales and delivery workspaces. */
+.role-section-nav{z-index:1001}
+.role-section-nav button{cursor:pointer}
+#role-depot-orders,#role-depot-cash,#role-depot-sales,#role-depot-debts,#role-depot-stock,#role-van-sales,#role-van-cash,#role-driver-delivery,#role-driver-cash{scroll-margin-top:18px}
