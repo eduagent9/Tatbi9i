@@ -43,7 +43,11 @@ jobs:
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           const report = JSON.parse(fs.readFileSync('/tmp/tatbiqi-npm-audit.json', 'utf8'));
-          const totals = report.metadata?.vulnerabilities ?? {};
+          if (!report.metadata?.vulnerabilities) {
+            console.error('Dependency audit failed to return a valid report.');
+            process.exit(1);
+          }
+          const totals = report.metadata.vulnerabilities;
           console.log('Audit totals:', JSON.stringify(totals));
           for (const [name, vulnerability] of Object.entries(report.vulnerabilities ?? {})) {
             console.log(name, JSON.stringify({
