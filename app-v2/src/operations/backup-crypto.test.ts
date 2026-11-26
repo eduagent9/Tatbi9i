@@ -1,12 +1,5 @@
-import { beforeAll, describe, expect, it } from 'vitest';
-import { webcrypto } from 'node:crypto';
+import { describe, expect, it } from 'vitest';
 import { decryptBackupText, encryptBackupText, isEncryptedBackupText } from './backup-crypto';
-
-beforeAll(() => {
-  if (!globalThis.crypto?.subtle) {
-    Object.defineProperty(globalThis, 'crypto', { configurable: true, value: webcrypto });
-  }
-});
 
 describe('encrypted backup files', () => {
   it('encrypts and decrypts a backup without exposing the plaintext', async () => {
