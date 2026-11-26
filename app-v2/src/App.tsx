@@ -100,7 +100,7 @@ export default function App() {
   const [stockDirection, setStockDirection] = useState<'in' | 'out'>('in');
   const [stockOutType, setStockOutType] = useState<'delivery' | 'damage' | 'supplier_return'>('delivery');
   const [barcodeScanning,setBarcodeScanning]=useState(false);
-  const [activeSection,setActiveSection]=useState<'home'|'sales'|'inventory'|'distribution'|'purchases'|'relations'|'management'>('home');
+  const [activeSection,setActiveSection]=useState<'home'|'sales'|'inventory'|'distribution'|'purchases'|'relations'|'management'|'settings'>('home');
   const [language,setLanguage]=useState<AppLanguage>(()=>{const saved=localStorage.getItem('tatbiqi.language');return saved==='fr'||saved==='en'?saved:'ar';});
   useEffect(()=>{localStorage.setItem('tatbiqi.language',language);document.documentElement.lang=language;document.documentElement.dir=language==='ar'?'rtl':'ltr';},[language]);
   const tr=(key:Parameters<typeof translate>[1])=>translate(language,key);
@@ -849,7 +849,7 @@ export default function App() {
       {currentUser&&repository&&workspaceNavigation.length>0&&<nav className="main-section-nav role-section-nav" aria-label={tr('workspaceNavigation')}>
         {workspaceNavigation.map(item=><button type="button" key={item.id} aria-label={item.label} onClick={()=>document.getElementById(item.id)?.scrollIntoView({behavior:'smooth',block:'start'})}><span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-label">{item.label}</span></button>)}
       </nav>}
-      {currentUser?.role==='owner'&&repository&&<nav className="main-section-nav" aria-label="الأقسام الرئيسية">{([{id:'home',label:tr('home'),icon:'⌂'},{id:'sales',label:tr('sales'),icon:'▣'},{id:'inventory',label:tr('inventory'),icon:'▤'},{id:'distribution',label:tr('distribution'),icon:'⇢'},{id:'purchases',label:tr('purchases'),icon:'⇩'},{id:'relations',label:tr('relations'),icon:'♧'},{id:'management',label:tr('management'),icon:'⚙'}] as const).map(item=><button type="button" key={item.id} className={activeSection===item.id?'active':''} aria-label={item.label} aria-current={activeSection===item.id?'page':undefined} onClick={()=>setActiveSection(item.id)}><span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-label">{item.label}</span></button>)}</nav>}
+      {currentUser?.role==='owner'&&repository&&<nav className="main-section-nav" aria-label="الأقسام الرئيسية">{([{id:'home',label:tr('home'),icon:'⌂'},{id:'sales',label:tr('sales'),icon:'▣'},{id:'inventory',label:tr('inventory'),icon:'▤'},{id:'distribution',label:tr('distribution'),icon:'⇢'},{id:'purchases',label:tr('purchases'),icon:'⇩'},{id:'relations',label:tr('relations'),icon:'♧'},{id:'management',label:tr('management'),icon:'⚙'},{id:'settings',label:tr('settings'),icon:'☷'}] as const).map(item=><button type="button" key={item.id} className={activeSection===item.id?'active':''} aria-label={item.label} aria-current={activeSection===item.id?'page':undefined} onClick={()=>setActiveSection(item.id)}><span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-label">{item.label}</span></button>)}</nav>}
       {currentUser?.role==='owner'&&repository && <div className="content-grid section-view" data-active-section={activeSection}>
         <section data-section="home" className="dashboard-overview">
           <div className="dashboard-welcome"><div><p className="eyebrow">نظرة عامة</p><h3>مرحبا {currentUser.display_name}</h3><p>ها ملخص النشاط ديال الشركة، وتقدر تمشي مباشرة لأي عملية.</p></div><span className="dashboard-date">{new Date().toLocaleDateString('ar-MA',{weekday:'long',day:'numeric',month:'long'})}</span></div>
@@ -1038,6 +1038,30 @@ export default function App() {
           </form>
           <div className="section-divider"></div><h4>جلسات التحصيل</h4>
           {cashSessions.length===0?<p className="hint">مازال ما تسجل حتى تحصيل نقدي من عمليات التوصيل.</p>:cashSessions.map(session=><article className="team-row" key={session.id}><div><strong>{session.user_name} · {session.vehicle_label||'بدون سيارة'}</strong><span>المفروض: {formatMad(session.expected_cash_minor)} · تسلم: {formatMad(session.handed_cash_minor)} · باقي: {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</span><span>الحالة: {session.status==='open'?'مفتوحة':session.status==='submitted'?'تسلمات للديبو':'تمت المطابقة'}</span>{session.status==='reconciled'&&<span>النقد المعدود: {formatMad(Number(session.counted_cash_minor??0))} · الفرق: {formatSignedMad(Number(session.counted_cash_minor??0)-Number(session.expected_cash_minor))}{session.discrepancy_reason?' · السبب: '+session.discrepancy_reason:''}</span>}{session.status==='submitted'&&<div className="order-actions"><label>النقد المعدود فعلياً (DH)<input type="number" min="0" step="0.01" value={cashCountedAmounts[session.id]??''} onChange={e=>setCashCountedAmounts(current=>({...current,[session.id]:e.target.value}))}/></label><label>سبب الفرق إذا ما تطابقش<input value={cashDiscrepancyReasons[session.id]??''} onChange={e=>setCashDiscrepancyReasons(current=>({...current,[session.id]:e.target.value}))} placeholder="مثلاً: نقص نقدي أو خطأ فالعد"/></label><button type="button" className="secondary-button" disabled={saving} onClick={()=>reconcileCashSession(session)}>تأكيد المطابقة</button></div>}</div></article>)}
+        </section>
+
+        <section data-section="settings" className="panel team-panel settings-panel">
+          <div className="panel-heading"><div><h3>{tr('settingsTitle')}</h3><p>{tr('settingsSubtitle')}</p></div><span className="step-mark">SYS</span></div>
+          <div className="settings-group"><h4>{tr('settingsLanguageTitle')}</h4><p className="hint">{tr('settingsLanguageHint')}</p>
+            <label>{tr('language')}<select value={language} onChange={event=>setLanguage(event.target.value as AppLanguage)}><option value="ar">العربية</option><option value="fr">Français</option><option value="en">English</option></select></label>
+          </div>
+          <div className="section-divider"></div>
+          <div className="settings-group"><h4>{tr('settingsBusinessTitle')}</h4>
+            <div className="settings-info-grid">
+              <article><span>{tr('settingsCurrency')}</span><strong>MAD · DH</strong></article>
+              <article><span>{tr('settingsStorage')}</span><strong>{tr('settingsOffline')}</strong></article>
+              <article><span>{tr('settingsDatabase')}</span><strong>SQLite · SQLCipher</strong></article>
+              <article><span>{tr('settingsVersion')}</span><strong>2.0 · Android</strong></article>
+            </div><p className="hint">{tr('settingsBusinessHint')}</p>
+          </div>
+          <div className="section-divider"></div>
+          <div className="settings-group"><h4>{tr('settingsDataTitle')}</h4><p className="hint">{tr('settingsDataHint')}</p>
+            <button type="button" className="secondary-button" onClick={()=>setActiveSection('management')}>{tr('settingsOpenBackup')}</button>
+          </div>
+          <div className="section-divider"></div>
+          <div className="settings-group"><h4>{tr('settingsSecurityTitle')}</h4>
+            <ul className="settings-checklist"><li>{tr('settingsSecurityPin')}</li><li>{tr('settingsSecurityBackup')}</li><li>{tr('settingsSecurityOffline')}</li></ul>
+          </div>
         </section>
         <InvoiceArchivePanel onSelect={invoice=>setLastInvoice(invoice)}/>
         <DistributionOperationsPanel user={currentUser} users={teamUsers} vehicles={teamVehicles} customers={customers} products={products}/>
