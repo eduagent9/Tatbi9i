@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { applyMigrations, createSqliteExecutor, type SqliteExecutor, type Migration } from './sqlite-database';
+import { applyMigrations, createSqliteExecutor, verifyDatabaseEncryptionAfterClose, type SqliteExecutor, type Migration } from './sqlite-database';
 
 function fakeDb(options: { failSql?: string } = {}) {
   let version = 0;
@@ -84,5 +84,35 @@ describe('SQLite migration runner', () => {
     expect(fake.db.rollbackTransaction).toHaveBeenCalledOnce();
     expect(fake.db.commitTransaction).not.toHaveBeenCalled();
     expect(fake.transaction).toBe(false);
+  });
+});
+
+
+describe('SQLCipher on-disk verification', () => {
+  it('closes the live connection before asking the native plugin to inspect the database file', async () => {
+    const calls: string[] = [];
+    const inspector = {
+      closeConnection: vi.fn(async (name: string, readonly: boolean) => {
+        calls.push(`close:${name}:${readonly}`);
+      }),
+      isDatabaseEncrypted: vi.fn(async (name: string) => {
+        calls.push(`inspect:${name}`);
+        return { result: true };
+      }),
+    };
+
+    await expect(verifyDatabaseEncryptionAfterClose(inspector, 'tatbiqi')).resolves.toBe(true);
+    expect(calls).toEqual(['close:tatbiqi:false', 'inspect:tatbiqi']);
+  });
+
+  it('preserves a negative encryption result instead of treating it as success', async () => {
+    const inspector = {
+      closeConnection: vi.fn(async () => undefined),
+      isDatabaseEncrypted: vi.fn(async () => ({ result: false })),
+    };
+
+    await expect(verifyDatabaseEncryptionAfterClose(inspector, 'tatbiqi')).resolves.toBe(false);
+    expect(inspector.closeConnection).toHaveBeenCalledOnce();
+    expect(inspector.isDatabaseEncrypted).toHaveBeenCalledOnce();
   });
 });
