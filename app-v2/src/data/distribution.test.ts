@@ -119,4 +119,28 @@ describe('DistributionRepository',()=>{
   expect(db.commitTransaction).toHaveBeenCalledOnce();
  });
 
+
+ it('maps failed and skipped route outcomes to the allowed not_available proof result',async()=>{
+  for(const status of ['failed','skipped'] as const){
+   const db=makeDb(sql=>sql.includes('FROM delivery_route_stops s JOIN delivery_routes r')?[{
+    id:'stop1',route_id:'route1',order_id:'order1',status:'pending',driver_user_id:'driver1',route_status:'started'
+   }]:[]);
+   const repo=new DistributionRepository(db,()=> '2026-11-22T12:00:00.000Z',()=> 'generated');
+   await repo.recordStop({id:'proof1',stopId:'stop1',driverId:'driver1',status,failureReason:'المحل مغلق'});
+   const proofInsert=vi.mocked(db.run).mock.calls.find(([sql])=>sql.includes('INSERT INTO delivery_proofs'));
+   expect(proofInsert?.[1]?.[4]).toBe('not_available');
+   expect(db.commitTransaction).toHaveBeenCalledOnce();
+  }
+ });
+ it('maps partially delivered route outcomes to the allowed partial proof result',async()=>{
+  const db=makeDb(sql=>sql.includes('FROM delivery_route_stops s JOIN delivery_routes r')?[{
+   id:'stop1',route_id:'route1',order_id:'order1',status:'pending',driver_user_id:'driver1',route_status:'started'
+  }]:[]);
+  const repo=new DistributionRepository(db,()=> '2026-11-22T12:00:00.000Z',()=> 'generated');
+  await repo.recordStop({id:'proof1',stopId:'stop1',driverId:'driver1',status:'partially_delivered',recipientName:'المستلم'});
+  const proofInsert=vi.mocked(db.run).mock.calls.find(([sql])=>sql.includes('INSERT INTO delivery_proofs'));
+  expect(proofInsert?.[1]?.[4]).toBe('partial');
+  expect(db.commitTransaction).toHaveBeenCalledOnce();
+ });
+
 });
