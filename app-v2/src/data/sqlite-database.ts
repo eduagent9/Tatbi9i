@@ -170,6 +170,23 @@ class CapacitorSqliteFactory implements SqliteConnectionFactory {
       : await this.sqlite.createConnection(name, true, mode, 1, false);
 
     await connection.open();
+
+    // A freshly opened SQLite database may not have any persisted page yet.
+    // SQLCipher's database-state detector can therefore report UNENCRYPTED
+    // until the first page is written. The plugin's own encryption guide
+    // verifies a new database only after creating its first table and rows.
+    // Write and remove a private probe before checking; no business data is touched.
+    if (!exists) {
+      await connection.execute(
+        'CREATE TABLE IF NOT EXISTS __tatbiqi_encryption_probe (id INTEGER PRIMARY KEY, value TEXT NOT NULL);',
+      );
+      await connection.run(
+        'INSERT OR REPLACE INTO __tatbiqi_encryption_probe (id, value) VALUES (?, ?);',
+        [1, 'sqlcipher-check'],
+      );
+      await connection.execute('DROP TABLE __tatbiqi_encryption_probe;');
+    }
+
     const encryptedAfter = (await this.sqlite.isDatabaseEncrypted(name)).result;
     if (!encryptedAfter) {
       let cipherVersion = 'unavailable';
