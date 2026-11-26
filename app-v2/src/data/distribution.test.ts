@@ -135,7 +135,7 @@ describe('DistributionRepository',()=>{
  it('maps partially delivered route outcomes to the allowed partial proof result and links the invoice with its stock movement',async()=>{
   const db=makeDb(sql=>{
    if(sql.includes('FROM delivery_route_stops s JOIN delivery_routes r'))return [{id:'stop1',route_id:'route1',order_id:'order1',status:'pending',driver_user_id:'driver1',route_status:'started'}];
-   if(sql.includes('FROM invoices i LEFT JOIN stock_movements'))return [{id:'invoice1',order_status:'partially_delivered',stock_movement_count:2}];
+   if(sql.includes('FROM invoices i JOIN sales_orders o'))return [{id:'invoice1',order_status:'partially_delivered',stock_movement_count:2}];
    return [];
   });
   const repo=new DistributionRepository(db,()=> '2026-11-22T12:00:00.000Z',()=> 'generated');
@@ -149,11 +149,24 @@ describe('DistributionRepository',()=>{
  it('refuses a delivered proof when no invoice-backed stock movement exists',async()=>{
   const db=makeDb(sql=>{
    if(sql.includes('FROM delivery_route_stops s JOIN delivery_routes r'))return [{id:'stop1',route_id:'route1',order_id:'order1',status:'pending',driver_user_id:'driver1',route_status:'started'}];
-   if(sql.includes('FROM invoices i LEFT JOIN stock_movements'))return [];
+   if(sql.includes('FROM invoices i JOIN sales_orders o'))return [];
    return [];
   });
   const repo=new DistributionRepository(db);
   await expect(repo.recordStop({id:'proof1',stopId:'stop1',driverId:'driver1',status:'delivered',recipientName:'المستلم'})).rejects.toThrow('خاصك تصدر فاتورة التسليم');
+  expect(db.rollbackTransaction).toHaveBeenCalledOnce();
+  expect(db.commitTransaction).not.toHaveBeenCalled();
+ });
+
+
+ it('rejects a full-delivery proof while the linked order is still partial',async()=>{
+  const db=makeDb(sql=>{
+   if(sql.includes('FROM delivery_route_stops s JOIN delivery_routes r'))return [{id:'stop1',route_id:'route1',order_id:'order1',status:'pending',driver_user_id:'driver1',route_status:'started'}];
+   if(sql.includes('FROM invoices i JOIN sales_orders o'))return [{id:'invoice1',order_status:'partially_delivered',stock_movement_count:2}];
+   return [];
+  });
+  const repo=new DistributionRepository(db);
+  await expect(repo.recordStop({id:'proof1',stopId:'stop1',driverId:'driver1',status:'delivered',recipientName:'المستلم'})).rejects.toThrow('الطلب مازال ما تسلمش كامل');
   expect(db.rollbackTransaction).toHaveBeenCalledOnce();
   expect(db.commitTransaction).not.toHaveBeenCalled();
  });
