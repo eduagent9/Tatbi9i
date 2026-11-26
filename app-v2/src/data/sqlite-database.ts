@@ -133,27 +133,57 @@ class CapacitorSqliteFactory implements SqliteConnectionFactory {
       throw new Error('قاعدة البيانات متاحة حالياً داخل تطبيق Android فقط؛ معاينة المتصفح لا تحفظ البيانات.');
     }
 
-    // The plugin persists this random secret using its native secure secret store.
-    // Never replace it on an existing installation: doing so would make the database unreadable.
+    // Confirm that Capacitor actually passed the native SQLCipher setting to Android.
+    const encryptionConfigured = (await this.sqlite.isInConfigEncryption()).result;
+    if (!encryptionConfigured) {
+      throw new Error('إعداد تشفير SQLCipher غير مفعّل داخل نسخة Android. لم يتم فتح قاعدة البيانات أو تعديلها.');
+    }
+
+    const exists = (await this.sqlite.isDatabase(name)).result;
+    const encryptedBefore = exists
+      ? (await this.sqlite.isDatabaseEncrypted(name)).result
+      : false;
     const secretStored = (await this.sqlite.isSecretStored()).result;
+
+    // Never create a replacement key for an existing encrypted database.
+    // Doing so would overwrite the only key that could later make its data readable.
+    if (exists && encryptedBefore && !secretStored) {
+      throw new Error('قاعدة البيانات مشفّرة ولكن مفتاحها الآمن غير موجود. أوقفنا الفتح لحماية بياناتك؛ لم ننشئ مفتاحاً بديلاً ولم نمسح البيانات.');
+    }
+
     if (!secretStored) {
       await this.sqlite.setEncryptionSecret(createRandomDatabaseSecret());
     }
 
-    const exists = (await this.sqlite.isDatabase(name)).result;
-    let mode: 'secret' | 'encryption' = 'secret';
-    if (exists) {
-      const encrypted = (await this.sqlite.isDatabaseEncrypted(name)).result;
-      // One-time SQLCipher conversion for databases created by older unencrypted builds.
-      mode = encrypted ? 'secret' : 'encryption';
-    }
+    // "encryption" is only for a pre-existing plaintext database; "secret" is
+    // used for a new database or one that is already encrypted.
+    const mode: 'secret' | 'encryption' = exists && !encryptedBefore
+      ? 'encryption'
+      : 'secret';
 
-    const connection = await this.sqlite.createConnection(name, true, mode, 1, false);
+    // Follow the plugin's documented connection-consistency flow to avoid
+    // creating a duplicate native connection after an interrupted startup.
+    const consistency = (await this.sqlite.checkConnectionsConsistency()).result;
+    const hasConnection = (await this.sqlite.isConnection(name, false)).result;
+    const connection = consistency && hasConnection
+      ? await this.sqlite.retrieveConnection(name, false)
+      : await this.sqlite.createConnection(name, true, mode, 1, false);
+
     await connection.open();
-    const encrypted = (await this.sqlite.isDatabaseEncrypted(name)).result;
-    if (!encrypted) {
+    const encryptedAfter = (await this.sqlite.isDatabaseEncrypted(name)).result;
+    if (!encryptedAfter) {
+      let cipherVersion = 'unavailable';
+      try {
+        const cipherInfo = await connection.query('PRAGMA cipher_version;');
+        const first = cipherInfo.values?.[0];
+        cipherVersion = String(first?.cipher_version ?? Object.values(first ?? {})[0] ?? 'unavailable');
+      } catch {
+        // The original encryption check remains the deciding safety condition.
+      }
       await this.sqlite.closeConnection(name, false).catch(() => undefined);
-      throw new Error('تعذر تأكيد تشفير قاعدة البيانات؛ توقف فتح التطبيق لحماية بياناتك.');
+      throw new Error(
+        `تعذر تأكيد تشفير قاعدة البيانات؛ أوقفنا فتحها لحماية بياناتك. التشخيص: config=${encryptionConfigured}, existed=${exists}, encryptedBefore=${encryptedBefore}, encryptedAfter=${encryptedAfter}, cipherVersion=${cipherVersion}, mode=${mode}. لم نحذف قاعدة البيانات.`,
+      );
     }
     return createSqliteExecutor(connection as unknown as NativeSqliteConnection);
   }
