@@ -40,7 +40,25 @@ jobs:
       - name: Dependency security audit summary
         run: |
           npm audit --json > /tmp/tatbiqi-npm-audit.json || true
-          node --input-type=module -e "import fs from 'node:fs'; const r=JSON.parse(fs.readFileSync('/tmp/tatbiqi-npm-audit.json','utf8')); console.log('Audit totals:', JSON.stringify(r.metadata?.vulnerabilities ?? {})); for (const [name,v] of Object.entries(r.vulnerabilities ?? {})) console.log(name, JSON.stringify({severity:v.severity, direct:v.isDirect, range:v.range, fixAvailable:v.fixAvailable, via:v.via.map(x=>typeof x==='string'?x:x.title)}));"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const report = JSON.parse(fs.readFileSync('/tmp/tatbiqi-npm-audit.json', 'utf8'));
+          const totals = report.metadata?.vulnerabilities ?? {};
+          console.log('Audit totals:', JSON.stringify(totals));
+          for (const [name, vulnerability] of Object.entries(report.vulnerabilities ?? {})) {
+            console.log(name, JSON.stringify({
+              severity: vulnerability.severity,
+              direct: vulnerability.isDirect,
+              range: vulnerability.range,
+              fixAvailable: vulnerability.fixAvailable,
+              via: vulnerability.via.map(item => typeof item === 'string' ? item : item.title),
+            }));
+          }
+          if ((totals.high ?? 0) > 0 || (totals.critical ?? 0) > 0) {
+            console.error('Dependency audit blocked: high or critical vulnerabilities found.');
+            process.exit(1);
+          }
+          NODE
       - name: Type-check and build
         run: npm run build
       - name: Unit tests
