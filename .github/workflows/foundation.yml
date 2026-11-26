@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - phase1/technical-foundation
+      - phase2/distribution-completion
+      - phase2/quality-hardening
     paths:
       - 'app-v2/**'
       - '.github/workflows/foundation.yml'
@@ -28,15 +30,39 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: app-v2/package.json
+      - name: Pin npm with the Arborist peer-resolution fix
+        run: npm install --global npm@11.21.2
       - name: Install dependencies
         run: npm install
       - name: Dependency security audit summary
         run: |
           npm audit --json > /tmp/tatbiqi-npm-audit.json || true
-          node --input-type=module -e "import fs from 'node:fs'; const r=JSON.parse(fs.readFileSync('/tmp/tatbiqi-npm-audit.json','utf8')); console.log('Audit totals:', JSON.stringify(r.metadata?.vulnerabilities ?? {})); for (const [name,v] of Object.entries(r.vulnerabilities ?? {})) console.log(name, JSON.stringify({severity:v.severity, direct:v.isDirect, range:v.range, fixAvailable:v.fixAvailable, via:v.via.map(x=>typeof x==='string'?x:x.title)}));"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const report = JSON.parse(fs.readFileSync('/tmp/tatbiqi-npm-audit.json', 'utf8'));
+          if (!report.metadata?.vulnerabilities) {
+            console.error('Dependency audit failed to return a valid report.');
+            process.exit(1);
+          }
+          const totals = report.metadata.vulnerabilities;
+          console.log('Audit totals:', JSON.stringify(totals));
+          for (const [name, vulnerability] of Object.entries(report.vulnerabilities ?? {})) {
+            console.log(name, JSON.stringify({
+              severity: vulnerability.severity,
+              direct: vulnerability.isDirect,
+              range: vulnerability.range,
+              fixAvailable: vulnerability.fixAvailable,
+              via: vulnerability.via.map(item => typeof item === 'string' ? item : item.title),
+            }));
+          }
+          if ((totals.high ?? 0) > 0 || (totals.critical ?? 0) > 0) {
+            console.error('Dependency audit blocked: high or critical vulnerabilities found.');
+            process.exit(1);
+          }
+          NODE
       - name: Type-check and build
         run: npm run build
       - name: Unit tests
@@ -59,20 +85,44 @@ jobs:
           db.executescript((schema_dir / '007_return_traceability.sql').read_text(encoding='utf-8'))
           db.executescript((schema_dir / '008_invoice_batch_allocations.sql').read_text(encoding='utf-8'))
           db.executescript((schema_dir / '009_user_pin_auth.sql').read_text(encoding='utf-8'))
+          db.executescript((schema_dir / '010_distribution_operations.sql').read_text(encoding='utf-8'))
+          db.executescript((schema_dir / '011_variant_vehicle_counts.sql').read_text(encoding='utf-8'))
+          db.executescript((schema_dir / '012_delivery_proof_invoice_link.sql').read_text(encoding='utf-8'))
           tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-          required = {'products', 'vehicles', 'stock_locations', 'stock_balances', 'stock_movements', 'invoices', 'invoice_lines', 'payments', 'cash_handovers', 'audit_events', 'sync_outbox', 'legacy_import_runs', 'purchase_receipts', 'purchase_receipt_lines', 'users', 'expenses', 'stock_counts', 'stock_count_lines', 'product_returns', 'product_return_lines'}
+          required = {'products', 'vehicles', 'stock_locations', 'stock_balances', 'stock_movements', 'invoices', 'invoice_lines', 'payments', 'cash_handovers', 'audit_events', 'sync_outbox', 'legacy_import_runs', 'purchase_receipts', 'purchase_receipt_lines', 'users', 'expenses', 'stock_counts', 'stock_count_lines', 'product_returns', 'product_return_lines', 'delivery_routes', 'delivery_route_stops', 'delivery_proofs', 'vehicle_day_sessions', 'vehicle_stock_counts', 'vehicle_stock_counts_v2', 'supplier_payments', 'supplier_returns', 'supplier_return_lines'}
           missing = required - tables
           assert not missing, f'Missing schema tables: {sorted(missing)}'
           return_columns = {row[1] for row in db.execute('PRAGMA table_info(product_return_lines)')}
           assert {'invoice_line_id', 'batch_id', 'line_total_minor'} <= return_columns, f'Missing return traceability columns: {return_columns}'
           allocation_columns = {row[1] for row in db.execute('PRAGMA table_info(invoice_line_batch_allocations)')}
           assert {'id', 'invoice_line_id', 'batch_id', 'quantity', 'unit_cost_minor'} <= allocation_columns, f'Missing invoice batch allocation columns: {allocation_columns}'
+          proof_columns = {row[1] for row in db.execute('PRAGMA table_info(delivery_proofs)')}
+          assert 'invoice_id' in proof_columns, f'Missing delivery proof invoice link: {proof_columns}'
           user_columns = {row[1] for row in db.execute('PRAGMA table_info(users)')}
           assert {'pin_salt', 'pin_hash'} <= user_columns, f'Missing PIN authentication columns: {user_columns}'
+          # Exercise the delivery proof CHECK constraint with every supported enum value.
+          db.execute('PRAGMA foreign_keys = OFF')
+          allowed_proof_results = ('delivered', 'partial', 'refused', 'not_available', 'damaged')
+          for index, result in enumerate(allowed_proof_results):
+              db.execute(
+                  'INSERT INTO delivery_proofs (id, route_stop_id, driver_user_id, result, captured_at, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+                  (f'proof-{index}', 'stop-placeholder', 'driver-placeholder', result, '2026-11-22T12:00:00Z', '2026-11-22T12:00:00Z'),
+              )
+          try:
+              db.execute(
+                  'INSERT INTO delivery_proofs (id, route_stop_id, driver_user_id, result, captured_at, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+                  ('proof-invalid', 'stop-placeholder', 'driver-placeholder', 'failed', '2026-11-22T12:00:00Z', '2026-11-22T12:00:00Z'),
+              )
+          except sqlite3.IntegrityError:
+              pass
+          else:
+              raise AssertionError('delivery_proofs accepted an unsupported result value')
+          db.commit()
+          db.execute('PRAGMA foreign_keys = ON')
           assert db.execute('PRAGMA foreign_keys').fetchone()[0] == 1
           owner = db.execute("SELECT id, role FROM users WHERE id='local-owner'").fetchone()
           assert owner == ('local-owner', 'owner'), f'Unexpected local owner profile: {owner}'
           depot = db.execute("SELECT id, label FROM stock_locations WHERE location_type='depot'").fetchone()
           assert depot == ('loc-depot-main', 'المستودع الرئيسي'), f'Unexpected default depot: {depot}'
-          print(f'SQLite schema OK: {len(tables)} tables created; migrations 001-009 applied; batch allocations and PIN auth verified; default depot seeded; foreign keys enabled')
+          print(f'SQLite schema OK: {len(tables)} tables created; migrations 001-012 applied; distribution, proof, supplier and vehicle-count tables verified; batch allocations and PIN auth verified; default depot seeded; foreign keys enabled')
           PY

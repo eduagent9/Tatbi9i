@@ -14,6 +14,7 @@ import invoiceBatchAllocationsSchema from './migrations/008_invoice_batch_alloca
 import userPinAuthSchema from './migrations/009_user_pin_auth.sql?raw';
 import distributionOperationsSchema from './migrations/010_distribution_operations.sql?raw';
 import variantVehicleCountsSchema from './migrations/011_variant_vehicle_counts.sql?raw';
+import deliveryProofInvoiceLinkSchema from './migrations/012_delivery_proof_invoice_link.sql?raw';
 
 export interface SqliteExecutor {
   execute(statement: string): Promise<unknown>;
@@ -33,12 +34,6 @@ interface NativeSqliteConnection {
   rollbackTransaction(): Promise<unknown>;
 }
 
-/**
- * The plugin wraps execute() and run() in their own transactions by default.
- * Our repositories and migration runner explicitly own multi-statement
- * transactions, so nested plugin transactions must be disabled for individual
- * statements. SQLite still commits standalone statements in autocommit mode.
- */
 export function createSqliteExecutor(connection: NativeSqliteConnection): SqliteExecutor {
   return {
     execute: statement => connection.execute(statement, false),
@@ -74,6 +69,7 @@ export const APP_MIGRATIONS: Migration[] = [
   { version: 9, name: 'user_pin_auth', sql: userPinAuthSchema },
   { version: 10, name: 'distribution_operations', sql: distributionOperationsSchema },
   { version: 11, name: 'variant_vehicle_counts', sql: variantVehicleCountsSchema },
+  { version: 12, name: 'delivery_proof_invoice_link', sql: deliveryProofInvoiceLinkSchema },
 ];
 
 export async function applyMigrations(
@@ -121,12 +117,97 @@ export async function applyMigrations(
   return currentVersion;
 }
 
+function createRandomDatabaseSecret(): string {
+  if (!globalThis.crypto?.getRandomValues) {
+    throw new Error('تعذر إنشاء مفتاح تشفير آمن على هذا الجهاز؛ لم يتم فتح قاعدة البيانات.');
+  }
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(32));
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
 class CapacitorSqliteFactory implements SqliteConnectionFactory {
   private readonly sqlite = new SQLiteConnection(CapacitorSQLite);
 
   async open(name: string): Promise<SqliteExecutor> {
-    const connection = await this.sqlite.createConnection(name, false, 'no-encryption', 1, false);
+    if (Capacitor.getPlatform() === 'web') {
+      throw new Error('قاعدة البيانات متاحة حالياً داخل تطبيق Android فقط؛ معاينة المتصفح لا تحفظ البيانات.');
+    }
+
+    // Confirm that Capacitor actually passed the native SQLCipher setting to Android.
+    const encryptionConfigured = (await this.sqlite.isInConfigEncryption()).result;
+    if (!encryptionConfigured) {
+      throw new Error('إعداد تشفير SQLCipher غير مفعّل داخل نسخة Android. لم يتم فتح قاعدة البيانات أو تعديلها.');
+    }
+
+    const exists = (await this.sqlite.isDatabase(name)).result;
+    const encryptedBefore = exists
+      ? (await this.sqlite.isDatabaseEncrypted(name)).result
+      : false;
+    const secretStored = (await this.sqlite.isSecretStored()).result;
+
+    // Never create a replacement key for an existing encrypted database.
+    // Doing so would overwrite the only key that could later make its data readable.
+    if (exists && encryptedBefore && !secretStored) {
+      throw new Error('قاعدة البيانات مشفّرة ولكن مفتاحها الآمن غير موجود. أوقفنا الفتح لحماية بياناتك؛ لم ننشئ مفتاحاً بديلاً ولم نمسح البيانات.');
+    }
+
+    if (!secretStored) {
+      await this.sqlite.setEncryptionSecret(createRandomDatabaseSecret());
+    }
+
+    // "encryption" is only for a pre-existing plaintext database; "secret" is
+    // used for a new database or one that is already encrypted.
+    const mode: 'secret' | 'encryption' = exists && !encryptedBefore
+      ? 'encryption'
+      : 'secret';
+
+    // Follow the plugin's documented connection-consistency flow to avoid
+    // creating a duplicate native connection after an interrupted startup.
+    const consistency = (await this.sqlite.checkConnectionsConsistency()).result;
+    const hasConnection = (await this.sqlite.isConnection(name, false)).result;
+    const connection = consistency && hasConnection
+      ? await this.sqlite.retrieveConnection(name, false)
+      : await this.sqlite.createConnection(name, true, mode, 1, false);
+
     await connection.open();
+
+    // A freshly opened SQLite database may not have any persisted page yet.
+    // SQLCipher's database-state detector can therefore report UNENCRYPTED
+    // until the first page is written. The plugin's own encryption guide
+    // verifies a new database only after creating its first table and rows.
+    // Write and remove a private probe before checking; no business data is touched.
+    if (!exists) {
+      await connection.execute(
+        'CREATE TABLE IF NOT EXISTS __tatbiqi_encryption_probe (id INTEGER PRIMARY KEY, value TEXT NOT NULL);',
+      );
+      await connection.run(
+        'INSERT OR REPLACE INTO __tatbiqi_encryption_probe (id, value) VALUES (?, ?);',
+        [1, 'sqlcipher-check'],
+      );
+      await connection.execute('DROP TABLE __tatbiqi_encryption_probe;');
+    }
+
+    // Flush encrypted pages from the WAL before asking the plugin to inspect the
+    // database file. Otherwise a brand-new database can have cipher_version=4
+    // while its most recent encrypted pages are still only present in the WAL,
+    // causing isDatabaseEncrypted() to report a false negative on first launch.
+    await connection.execute('PRAGMA wal_checkpoint(TRUNCATE);');
+
+    const encryptedAfter = (await this.sqlite.isDatabaseEncrypted(name)).result;
+    if (!encryptedAfter) {
+      let cipherVersion = 'unavailable';
+      try {
+        const cipherInfo = await connection.query('PRAGMA cipher_version;');
+        const first = cipherInfo.values?.[0];
+        cipherVersion = String(first?.cipher_version ?? Object.values(first ?? {})[0] ?? 'unavailable');
+      } catch {
+        // The original encryption check remains the deciding safety condition.
+      }
+      await this.sqlite.closeConnection(name, false).catch(() => undefined);
+      throw new Error(
+        `تعذر تأكيد تشفير قاعدة البيانات؛ أوقفنا فتحها لحماية بياناتك. التشخيص: config=${encryptionConfigured}, existed=${exists}, encryptedBefore=${encryptedBefore}, encryptedAfter=${encryptedAfter}, cipherVersion=${cipherVersion}, mode=${mode}. لم نحذف قاعدة البيانات.`,
+      );
+    }
     return createSqliteExecutor(connection as unknown as NativeSqliteConnection);
   }
 
@@ -159,8 +240,6 @@ export async function openAppDatabase(
       if (db) await factory.close(APP_DATABASE_NAME).catch(() => undefined);
       throw error;
     } finally {
-      // Clear the single-flight promise even when the native connection itself
-      // fails to open, so a later user retry can attempt a fresh connection.
       opening = null;
     }
   })();

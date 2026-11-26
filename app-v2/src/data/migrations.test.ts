@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { APP_MIGRATIONS } from './sqlite-database';
 
-describe('append-only distribution migration', () => {
-  it('registers migration 010 after the existing nine migrations', () => {
+describe('append-only distribution migrations', () => {
+  it('registers migrations 010-012 after the existing nine migrations', () => {
     expect(APP_MIGRATIONS.map(migration => migration.version)).toEqual(
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
     );
     expect(APP_MIGRATIONS[9].name).toBe('distribution_operations');
     expect(APP_MIGRATIONS[10].name).toBe('variant_vehicle_counts');
+    expect(APP_MIGRATIONS[11].name).toBe('delivery_proof_invoice_link');
+    expect(APP_MIGRATIONS[11].sql).toContain('invoice_id');
+    expect(APP_MIGRATIONS[11].sql).toContain('REFERENCES invoices(id) ON DELETE RESTRICT');
   });
 
   it('contains the data structures required for route execution and settlement', () => {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { formatMad, formatSignedMad, madToMinorUnits } from './data/money';
 import { hashPin, isValidPin, verifyPin } from './data/auth';
 import { canPerform, type AppPermission } from './data/permissions';
+import { getWorkspaceNavigation } from './data/workspace-navigation';
 import { canLoadDistributionOrder, canTransitionDistributionOrder } from './data/distribution-workflow';
 import { openAppDatabase } from './data/sqlite-database';
 import { ProductRepository, type ProductRecord } from './data/products';
@@ -19,7 +20,7 @@ import { DistributionOperationsPanel } from './operations/DistributionOperations
 import { InvoiceArchivePanel } from './operations/InvoiceArchivePanel';
 import { ProductCardPicker } from './operations/ProductCardPicker';
 import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
-import {translate,type AppLanguage} from './data/i18n';
+import {translate,type AppLanguage,type TranslationKey} from './data/i18n';
 import BrowserPreview from './BrowserPreview';
 import { Capacitor } from '@capacitor/core';
 
@@ -30,7 +31,7 @@ type CashSessionRow = { id:string; user_id:string; user_name:string; vehicle_lab
 type TeamUser = { id:string; display_name:string; phone:string|null; role:'owner'|'depot_manager'|'order_rep'|'van_sales'|'delivery_driver'; is_active:number };
 type AuthUser = TeamUser & { pin_salt:string|null; pin_hash:string|null };
 type TeamVehicle = { id:string; code:string; label:string; vehicle_type:'van_sales'|'delivery'; assigned_user_id:string|null; assigned_name:string|null };
-const roleLabels:Record<TeamUser['role'],string>={owner:'المالك',depot_manager:'مسؤول الديبو',order_rep:'مندوب الطلبات',van_sales:'مندوب البيع بالسيارة',delivery_driver:'السائق'};
+const roleLabels:Record<TeamUser['role'],TranslationKey>={owner:'owner',depot_manager:'depot_manager',order_rep:'order_rep',van_sales:'van_sales',delivery_driver:'delivery_driver'};
 
 export default function App() {
   const [repository, setRepository] = useState<ProductRepository | null>(null);
@@ -99,10 +100,11 @@ export default function App() {
   const [stockDirection, setStockDirection] = useState<'in' | 'out'>('in');
   const [stockOutType, setStockOutType] = useState<'delivery' | 'damage' | 'supplier_return'>('delivery');
   const [barcodeScanning,setBarcodeScanning]=useState(false);
-  const [activeSection,setActiveSection]=useState<'home'|'sales'|'inventory'|'distribution'|'purchases'|'relations'|'management'>('home');
+  const [activeSection,setActiveSection]=useState<'home'|'sales'|'inventory'|'distribution'|'purchases'|'relations'|'management'|'settings'>('home');
   const [language,setLanguage]=useState<AppLanguage>(()=>{const saved=localStorage.getItem('tatbiqi.language');return saved==='fr'||saved==='en'?saved:'ar';});
   useEffect(()=>{localStorage.setItem('tatbiqi.language',language);document.documentElement.lang=language;document.documentElement.dir=language==='ar'?'rtl':'ltr';},[language]);
   const tr=(key:Parameters<typeof translate>[1])=>translate(language,key);
+  const workspaceNavigation=currentUser?getWorkspaceNavigation(currentUser.role,tr):[];
   const browserPreview=Capacitor.getPlatform()==='web'&&new URLSearchParams(window.location.search).get('preview')==='1';
 
   const refresh = useCallback(async (repo: ProductRepository) => setProducts(await repo.list()), []);
@@ -760,9 +762,9 @@ export default function App() {
       </section>}
 
       {!loading&&!currentUser&&authMode==='setup'&&<section className="panel auth-panel"><div className="panel-heading"><div><h3>إعداد دخول المالك</h3><p>أول مرة خاصك تختار رمز PIN خاص بالمالك. غادي يتخزن كـ hash مملح، ماشي كنص واضح.</p></div></div><form onSubmit={setupOwnerPin}><label>رمز PIN (4 إلى 8 أرقام)<input type="password" inputMode="numeric" autoComplete="new-password" maxLength={8} required value={setupPin} onChange={e=>setSetupPin(e.target.value)} /></label><label>تأكيد رمز PIN<input type="password" inputMode="numeric" autoComplete="new-password" maxLength={8} required value={setupPinConfirm} onChange={e=>setSetupPinConfirm(e.target.value)} /></label><button className="primary-button" disabled={saving}>{saving?'كيتم الإعداد...':'حفظ رمز المالك والدخول'}</button></form></section>}
-      {!loading&&!currentUser&&authMode==='login'&&<section className="panel auth-panel"><div className="panel-heading"><div><h3>تسجيل الدخول</h3><p>اختار المستخدم ودخل رمز PIN ديالو.</p></div></div><form onSubmit={loginUser}><label>المستخدم<select required value={authUserId} onChange={e=>setAuthUserId(e.target.value)}>{authUsers.filter(user=>user.is_active===1&&user.pin_hash&&user.pin_salt).map(user=><option key={user.id} value={user.id}>{user.display_name} · {roleLabels[user.role]}</option>)}</select></label><label>رمز PIN<input type="password" inputMode="numeric" autoComplete="current-password" maxLength={8} required value={authPin} onChange={e=>setAuthPin(e.target.value)} /></label><button className="primary-button" disabled={saving}>{saving?'كيتم التحقق...':'دخول'}</button></form></section>}
+      {!loading&&!currentUser&&authMode==='login'&&<section className="panel auth-panel"><div className="panel-heading"><div><h3>تسجيل الدخول</h3><p>اختار المستخدم ودخل رمز PIN ديالو.</p></div></div><form onSubmit={loginUser}><label>المستخدم<select required value={authUserId} onChange={e=>setAuthUserId(e.target.value)}>{authUsers.filter(user=>user.is_active===1&&user.pin_hash&&user.pin_salt).map(user=><option key={user.id} value={user.id}>{user.display_name} · {tr(roleLabels[user.role])}</option>)}</select></label><label>رمز PIN<input type="password" inputMode="numeric" autoComplete="current-password" maxLength={8} required value={authPin} onChange={e=>setAuthPin(e.target.value)} /></label><button className="primary-button" disabled={saving}>{saving?'كيتم التحقق...':'دخول'}</button></form></section>}
       {currentUser?.role==='order_rep'&&repository&&<div className="content-grid">
-        <section data-section="management" className="panel team-panel">
+        <section id="role-orders" data-section="management" className="panel team-panel">
           <div className="panel-heading"><div><h3>تسجيل طلب محل</h3><p>سجل الكميات المطلوبة من المحل وأرسلها للديبو للتحضير</p></div><span className="step-mark">طلب جديد</span></div>
           <form onSubmit={submitDistributionOrder}>
             <label>المحل / الزبون<select required value={orderCustomerId} onChange={e=>setOrderCustomerId(e.target.value)}><option value="">اختار المحل</option>{customers.map(customer=><option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
@@ -776,17 +778,17 @@ export default function App() {
         </section>
       </div>}
       {currentUser?.role==='depot_manager'&&repository&&<div className="content-grid">
-        <section className="panel team-panel">
+        <section id="role-depot-orders" className="panel team-panel">
           <div className="panel-heading"><div><h3>تحضير طلبات المحلات</h3><p>قبول الطلبات، التحضير، وتأكيد الجاهزية ثم تحميل سيارة التوصيل</p></div><span className="step-mark">الديبو</span></div>
           {distributionOrders.filter(order=>!['delivered','cancelled'].includes(order.status)).length===0?<p className="hint">ما كايناش طلبات مفتوحة حالياً.</p>:distributionOrders.filter(order=>!['delivered','cancelled'].includes(order.status)).map(order=><article className="team-row" key={order.id}><div><strong>{order.order_number} · {order.customer_name}</strong><span>طلب من: {order.created_by_name} · {order.vehicle_label||'بلا سيارة محددة'}</span><span>الحالة: {({draft:'مسودة',submitted:'مرسل للديبو',accepted:'مقبول',preparing:'قيد التحضير',ready:'جاهز',partially_delivered:'تسليم جزئي',delivered:'تم التسليم',cancelled:'ملغى'} as Record<string,string>)[order.status]}</span></div><div className="order-actions">{order.status==='submitted'&&<button type="button" className="secondary-button" disabled={saving} onClick={()=>changeOrderStatus(order,'accepted')}>قبول الطلب</button>}{order.status==='accepted'&&<button type="button" className="secondary-button" disabled={saving} onClick={()=>changeOrderStatus(order,'preparing')}>بدء التحضير</button>}{order.status==='preparing'&&<button type="button" className="primary-button" disabled={saving} onClick={()=>changeOrderStatus(order,'ready')}>تأكيد الجاهزية</button>}{order.status==='ready'&&<button type="button" className="secondary-button" disabled={saving||!order.assigned_vehicle_id} onClick={()=>loadOrderToVehicle(order)}>تحميل سيارة التوصيل</button>}</div></article>)}
           <p className="hint">التسليم النهائي وإصدار فاتورة الكميات المسلمة من اختصاص السائق المعيّن، ولا يمكن للديبو تأكيده بدلاً عنه.</p>
         </section>
 
-        <section className="panel team-panel"><div className="panel-heading"><div><h3>استلام ومطابقة النقدية</h3><p>راجع الجلسات اللي تسلمات للديبو وسجل المبلغ المعدود فعلياً</p></div></div>
+        <section id="role-depot-cash" className="panel team-panel"><div className="panel-heading"><div><h3>استلام ومطابقة النقدية</h3><p>راجع الجلسات اللي تسلمات للديبو وسجل المبلغ المعدود فعلياً</p></div></div>
           {cashSessions.filter(session=>session.status==='submitted').length===0?<p className="hint">ما كايناش عهد نقدية كتسنى المطابقة.</p>:cashSessions.filter(session=>session.status==='submitted').map(session=><article className="team-row" key={session.id}><div><strong>{session.user_name} · {session.vehicle_label||'بدون سيارة'}</strong><span>المفروض: {formatMad(session.expected_cash_minor)} · تسلم: {formatMad(session.handed_cash_minor)}</span><label>المبلغ المعدود (DH)<input type="number" min="0" step="0.01" value={cashCountedAmounts[session.id]??''} onChange={e=>setCashCountedAmounts(current=>({...current,[session.id]:e.target.value}))}/></label><label>سبب الفرق إذا وجد<input value={cashDiscrepancyReasons[session.id]??''} onChange={e=>setCashDiscrepancyReasons(current=>({...current,[session.id]:e.target.value}))}/></label><button type="button" className="secondary-button" disabled={saving} onClick={()=>reconcileCashSession(session)}>تأكيد المطابقة</button></div></article>)}
         </section>
 
-        <section className="panel sales-panel"><div className="panel-heading"><div><h3>بيع من المستودع</h3><p>بيع مباشر من مخزون الديبو مع أداء جزئي أو آجل</p></div></div>
+        <section id="role-depot-sales" className="panel sales-panel"><div className="panel-heading"><div><h3>بيع من المستودع</h3><p>بيع مباشر من مخزون الديبو مع أداء جزئي أو آجل</p></div></div>
           <form onSubmit={submitSale}>
             <label>الزبون<select required value={saleCustomerId} onChange={e=>setSaleCustomerId(e.target.value)}><option value="">اختار الزبون</option>{customers.map(customer=><option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
             {saleLines.map((line,index)=><div className="sale-line" key={index}><ProductCardPicker products={products} value={line.productId} onChange={value=>setSaleLines(current=>current.map((item,i)=>i===index?{...item,productId:value}:item))}/><button type="button" className="secondary-button" onClick={()=>scanProductBarcode('sale',index)}>مسح باركود المنتج</button><label>الكمية<input type="number" min="0.01" step="0.01" required value={line.quantity} onChange={e=>setSaleLines(current=>current.map((item,i)=>i===index?{...item,quantity:e.target.value}:item))}/></label><button type="button" className="remove-line" disabled={saleLines.length===1} onClick={()=>setSaleLines(current=>current.filter((_,i)=>i!==index))}>حذف السطر</button></div>)}
@@ -796,20 +798,20 @@ export default function App() {
             <button className="primary-button" disabled={saving||customers.length===0||products.length===0}>تأكيد البيع من المستودع</button>
           </form>
         </section>
-        <section data-section="sales" className="panel collection-panel"><div className="panel-heading"><div><h3>تحصيل ديون الزبناء</h3><p>تسجيل أداء لاحق على فاتورة سابقة</p></div></div>
+        <section id="role-depot-debts" data-section="sales" className="panel collection-panel"><div className="panel-heading"><div><h3>تحصيل ديون الزبناء</h3><p>تسجيل أداء لاحق على فاتورة سابقة</p></div></div>
           <form onSubmit={submitCollection}>
             <label>الفاتورة المستحقة<select required value={collectionInvoiceId} onChange={e=>setCollectionInvoiceId(e.target.value)}><option value="">اختار الفاتورة</option>{outstandingInvoices.map(invoice=><option key={invoice.invoiceId} value={invoice.invoiceId}>{invoice.invoiceNumber} · {invoice.customerName} · باقي {formatMad(invoice.dueMinor)}</option>)}</select></label>
             <label>المبلغ المستخلص (DH)<input type="number" min="0.01" step="0.01" required value={collectionAmount} onChange={e=>setCollectionAmount(e.target.value)}/></label>
             <button className="primary-button" disabled={saving||outstandingInvoices.length===0}>تأكيد تحصيل الدين</button>
           </form>
         </section>
-        <section data-section="inventory" className="panel stock-panel"><div className="panel-heading"><div><h3>المخزون والتنبيهات</h3><p>مراقبة المنتجات والكميات المنخفضة</p></div></div>
+        <section id="role-depot-stock" data-section="inventory" className="panel stock-panel"><div className="panel-heading"><div><h3>المخزون والتنبيهات</h3><p>مراقبة المنتجات والكميات المنخفضة</p></div></div>
           {products.length===0?<p className="hint">مازال ما تسجلوش المنتجات.</p>:products.map(product=><article className="alert-row" key={product.id}><div><strong>{product.name}</strong><span>حد التنبيه: {product.low_stock_threshold}</span></div><strong>{product.total_stock} متوفر</strong></article>)}
         </section>
       </div>}
 
       {currentUser?.role==='van_sales'&&repository&&<div className="content-grid">
-        <section className="panel sales-panel"><div className="panel-heading"><div><h3>بيع مباشر من السيارة</h3><p>الفاتورة كتخصم من مخزون السيارة المعيّنة ليك فقط</p></div><span className="step-mark">بيع السيارة</span></div>
+        <section id="role-van-sales" className="panel sales-panel"><div className="panel-heading"><div><h3>بيع مباشر من السيارة</h3><p>الفاتورة كتخصم من مخزون السيارة المعيّنة ليك فقط</p></div><span className="step-mark">بيع السيارة</span></div>
           <form onSubmit={submitVehicleSale}>
             <label>الزبون<select required value={saleCustomerId} onChange={e=>setSaleCustomerId(e.target.value)}><option value="">اختار الزبون</option>{customers.map(customer=><option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
             {saleLines.map((line,index)=><div className="sale-line" key={index}><ProductCardPicker products={products} value={line.productId} onChange={value=>setSaleLines(current=>current.map((item,i)=>i===index?{...item,productId:value}:item))}/><button type="button" className="secondary-button" onClick={()=>scanProductBarcode('sale',index)}>مسح باركود المنتج</button><label>الكمية<input type="number" min="0.01" step="0.01" required value={line.quantity} onChange={e=>setSaleLines(current=>current.map((item,i)=>i===index?{...item,quantity:e.target.value}:item))}/></label><button type="button" className="remove-line" disabled={saleLines.length===1} onClick={()=>setSaleLines(current=>current.filter((_,i)=>i!==index))}>حذف السطر</button></div>)}
@@ -819,32 +821,35 @@ export default function App() {
           </form>
           <p className="hint">الثمن كيتاخد مباشرة من سعر المنتج المسجل؛ ما كاينش حقل لتغييره. المبالغ المحصلة كتدخل لعهدة السيارة.</p>
         </section>
-        <section className="panel team-panel"><div className="panel-heading"><div><h3>عهدة النقدية ديالي</h3><p>المبالغ النقدية المسجلة من مبيعات السيارة</p></div></div>
+        <section id="role-van-cash" className="panel team-panel"><div className="panel-heading"><div><h3>عهدة النقدية ديالي</h3><p>المبالغ النقدية المسجلة من مبيعات السيارة</p></div></div>
           {cashSessions.filter(session=>session.user_id===currentUser.id).length===0?<p className="hint">مازال ما تسجلات حتى عملية نقدية.</p>:cashSessions.filter(session=>session.user_id===currentUser.id).map(session=><article className="team-row" key={session.id}><div><strong>{session.vehicle_label||'سيارة البيع'}</strong><span>المتوقع: {formatMad(session.expected_cash_minor)} · المسلم: {formatMad(session.handed_cash_minor)} · الباقي: {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</span><span>الحالة: {session.status==='open'?'مفتوحة':session.status==='submitted'?'تسلمات للديبو':'تمت المطابقة'}</span></div></article>)}
           <div className="section-divider"></div><h4>تسليم النقدية للديبو</h4>
           <form onSubmit={submitCashHandover}>
             <label>جلسة التحصيل<select required value={handoverSessionId} onChange={e=>setHandoverSessionId(e.target.value)}><option value="">اختار عهدتك المفتوحة</option>{cashSessions.filter(session=>session.status==='open'&&session.user_id===currentUser.id).map(session=><option key={session.id} value={session.id}>{session.vehicle_label||'السيارة'} · باقي {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</option>)}</select></label>
-            <label>المستلم فالديبو<select required value={handoverReceiverId} onChange={e=>setHandoverReceiverId(e.target.value)}><option value="">اختار المستلم</option>{teamUsers.filter(user=>user.is_active===1&&(user.role==='owner'||user.role==='depot_manager')).map(user=><option key={user.id} value={user.id}>{user.display_name} · {roleLabels[user.role]}</option>)}</select></label>
+            <label>المستلم فالديبو<select required value={handoverReceiverId} onChange={e=>setHandoverReceiverId(e.target.value)}><option value="">اختار المستلم</option>{teamUsers.filter(user=>user.is_active===1&&(user.role==='owner'||user.role==='depot_manager')).map(user=><option key={user.id} value={user.id}>{user.display_name} · {tr(roleLabels[user.role])}</option>)}</select></label>
             <label>المبلغ المسلم (DH)<input required type="number" min="0.01" step="0.01" value={handoverAmount} onChange={e=>setHandoverAmount(e.target.value)}/></label>
             <button className="primary-button" disabled={saving||cashSessions.every(session=>session.status!=='open'||session.user_id!==currentUser.id)}>تأكيد التسليم وإصدار الوصل</button>
           </form>
         </section>
       </div>}
       {currentUser?.role==='delivery_driver'&&repository&&<div className="content-grid">
-        <section className="panel team-panel">
+        <section id="role-driver-delivery" className="panel team-panel">
           <div className="panel-heading"><div><h3>طلبات التوصيل ديالي</h3><p>راجع الطلبات المحملة لسيارتك وسجل الكميات اللي سلمتي فعلاً</p></div><span className="step-mark">التوصيل</span></div>
           {distributionOrders.filter(order=>teamVehicles.some(vehicle=>vehicle.id===order.assigned_vehicle_id&&vehicle.assigned_user_id===currentUser.id&&vehicle.vehicle_type==='delivery')&&['ready','partially_delivered'].includes(order.status)).length===0?<p className="hint">ما عندك حتى طلب جاهز للتسليم حالياً.</p>:distributionOrders.filter(order=>teamVehicles.some(vehicle=>vehicle.id===order.assigned_vehicle_id&&vehicle.assigned_user_id===currentUser.id&&vehicle.vehicle_type==='delivery')&&['ready','partially_delivered'].includes(order.status)).map(order=><article className="team-row" key={order.id}><div><strong>{order.order_number} · {order.customer_name}</strong><span>{order.vehicle_label||'سيارتي'} · {order.status==='ready'?'جاهز للتسليم':'تسليم جزئي'}</span><div className="order-delivery-lines">{(orderDeliveryLines[order.id]??[]).filter(line=>line.remaining_quantity>0).map(line=><label key={line.id}>{line.product_name_snapshot} · باقي {line.remaining_quantity}<input type="number" min="0" max={line.remaining_quantity} step="0.01" value={deliveryQuantities[order.id+':'+line.id]??String(line.remaining_quantity)} onChange={e=>setDeliveryQuantities(current=>({...current,[order.id+':'+line.id]:e.target.value}))}/></label>)}</div><label>النقد اللي جمعتي (DH)<input type="number" min="0" step="0.01" value={deliveryCollectedAmounts[order.id]??'0'} onChange={e=>setDeliveryCollectedAmounts(current=>({...current,[order.id]:e.target.value}))} /></label><button type="button" className="primary-button" disabled={saving} onClick={()=>deliverOrder(order)}>تأكيد التسليم وإصدار الفاتورة</button></div></article>)}
         </section>
-        <section className="panel team-panel"><div className="panel-heading"><div><h3>تسليم النقدية للديبو</h3><p>سلم المبلغ اللي جمعتي وخذ وصل التسليم</p></div></div>
+        <section id="role-driver-cash" className="panel team-panel"><div className="panel-heading"><div><h3>تسليم النقدية للديبو</h3><p>سلم المبلغ اللي جمعتي وخذ وصل التسليم</p></div></div>
           <form onSubmit={submitCashHandover}>
             <label>جلسة التحصيل<select required value={handoverSessionId} onChange={e=>setHandoverSessionId(e.target.value)}><option value="">اختار عهدتك المفتوحة</option>{cashSessions.filter(session=>session.status==='open'&&session.user_id===currentUser.id).map(session=><option key={session.id} value={session.id}>{session.vehicle_label||'السيارة'} · باقي {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</option>)}</select></label>
-            <label>المستلم فالديبو<select required value={handoverReceiverId} onChange={e=>setHandoverReceiverId(e.target.value)}><option value="">اختار المستلم</option>{teamUsers.filter(user=>user.is_active===1&&(user.role==='owner'||user.role==='depot_manager')).map(user=><option key={user.id} value={user.id}>{user.display_name} · {roleLabels[user.role]}</option>)}</select></label>
+            <label>المستلم فالديبو<select required value={handoverReceiverId} onChange={e=>setHandoverReceiverId(e.target.value)}><option value="">اختار المستلم</option>{teamUsers.filter(user=>user.is_active===1&&(user.role==='owner'||user.role==='depot_manager')).map(user=><option key={user.id} value={user.id}>{user.display_name} · {tr(roleLabels[user.role])}</option>)}</select></label>
             <label>المبلغ المسلم (DH)<input required type="number" min="0.01" step="0.01" value={handoverAmount} onChange={e=>setHandoverAmount(e.target.value)}/></label>
             <button className="primary-button" disabled={saving||cashSessions.every(session=>session.status!=='open'||session.user_id!==currentUser.id)}>تأكيد التسليم وإصدار الوصل</button>
           </form>
         </section>
       </div>}
-      {currentUser?.role==='owner'&&repository&&<nav className="main-section-nav" aria-label="الأقسام الرئيسية">{([{id:'home',label:tr('home'),icon:'⌂'},{id:'sales',label:tr('sales'),icon:'▣'},{id:'inventory',label:tr('inventory'),icon:'▤'},{id:'distribution',label:tr('distribution'),icon:'⇢'},{id:'purchases',label:tr('purchases'),icon:'⇩'},{id:'relations',label:tr('relations'),icon:'♧'},{id:'management',label:tr('management'),icon:'⚙'}] as const).map(item=><button type="button" key={item.id} className={activeSection===item.id?'active':''} aria-label={item.label} aria-current={activeSection===item.id?'page':undefined} onClick={()=>setActiveSection(item.id)}><span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-label">{item.label}</span></button>)}</nav>}
+      {currentUser&&repository&&workspaceNavigation.length>0&&<nav className="main-section-nav role-section-nav" aria-label={tr('workspaceNavigation')}>
+        {workspaceNavigation.map(item=><button type="button" key={item.id} aria-label={item.label} onClick={()=>document.getElementById(item.id)?.scrollIntoView({behavior:'smooth',block:'start'})}><span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-label">{item.label}</span></button>)}
+      </nav>}
+      {currentUser?.role==='owner'&&repository&&<nav className="main-section-nav" aria-label="الأقسام الرئيسية">{([{id:'home',label:tr('home'),icon:'⌂'},{id:'sales',label:tr('sales'),icon:'▣'},{id:'inventory',label:tr('inventory'),icon:'▤'},{id:'distribution',label:tr('distribution'),icon:'⇢'},{id:'purchases',label:tr('purchases'),icon:'⇩'},{id:'relations',label:tr('relations'),icon:'♧'},{id:'management',label:tr('management'),icon:'⚙'},{id:'settings',label:tr('settings'),icon:'☷'}] as const).map(item=><button type="button" key={item.id} className={activeSection===item.id?'active':''} aria-label={item.label} aria-current={activeSection===item.id?'page':undefined} onClick={()=>setActiveSection(item.id)}><span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-label">{item.label}</span></button>)}</nav>}
       {currentUser?.role==='owner'&&repository && <div className="content-grid section-view" data-active-section={activeSection}>
         <section data-section="home" className="dashboard-overview">
           <div className="dashboard-welcome"><div><p className="eyebrow">نظرة عامة</p><h3>مرحبا {currentUser.display_name}</h3><p>ها ملخص النشاط ديال الشركة، وتقدر تمشي مباشرة لأي عملية.</p></div><span className="dashboard-date">{new Date().toLocaleDateString('ar-MA',{weekday:'long',day:'numeric',month:'long'})}</span></div>
@@ -889,7 +894,7 @@ export default function App() {
             <button className="secondary-button" disabled={saving}>{saving?"كيتم الحفظ...":"إضافة عضو للفريق"}</button>
           </form>
           <div className="team-list"><h4>الأعضاء المسجلون</h4>
-            {teamUsers.map(user=><article className="team-row" key={user.id}><div><strong>{user.display_name}</strong><span>{roleLabels[user.role]} · {user.phone||"بدون هاتف"}</span></div><span className={user.is_active?"team-active":"team-inactive"}>{user.is_active?"نشط":"موقوف"}</span></article>)}
+            {teamUsers.map(user=><article className="team-row" key={user.id}><div><strong>{user.display_name}</strong><span>{tr(roleLabels[user.role])} · {user.phone||"بدون هاتف"}</span></div><span className={user.is_active?"team-active":"team-inactive"}>{user.is_active?"نشط":"موقوف"}</span></article>)}
           </div>
           <div className="section-divider"></div>
           <div className="team-list"><h4>السيارات والمسؤولون عنها</h4>
@@ -904,7 +909,7 @@ export default function App() {
               </article>;
             })}
           </div>
-          <p className="hint">هاد الجزء كيسجل الفريق وتعيين السيارات فقط؛ تسجيل الدخول وفرض الصلاحيات على العمليات مازال خاصهم يتكملو قبل الاستعمال الحقيقي.</p>
+          <p className="hint">تسجيل الدخول محمي برمز PIN، والصلاحيات كتتحدد حسب الدور. قبل الاستعمال التجاري، خاص تجربة كل دور والعمليات ديالو على هاتف حقيقي.</p>
         </section>
         <section id="inventory-section" data-section="inventory" className="panel form-panel"><div className="panel-heading"><div><h3>إضافة منتج</h3><p>المبالغ بالدرهم المغربي</p></div><span className="step-mark">01</span></div>
           <form onSubmit={submit}>
@@ -1027,12 +1032,36 @@ export default function App() {
           <div className="panel-heading"><div><h3>تسليم نقدية المبيعات للديبو</h3><p>تتبع المبالغ اللي جمعها السائق وإصدار وصل عند تسليمها للمالك أو مسؤول الديبو</p></div><span className="step-mark">النقدية</span></div>
           <form onSubmit={submitCashHandover}>
             <label>السائق / جلسة التحصيل<select required value={handoverSessionId} onChange={e=>setHandoverSessionId(e.target.value)}><option value="">اختار جلسة مفتوحة</option>{cashSessions.filter(session=>session.status==='open').map(session=><option key={session.id} value={session.id}>{session.user_name} · {session.vehicle_label||'بدون سيارة'} · باقي {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</option>)}</select></label>
-            <label>المستلم فالديبو<select required value={handoverReceiverId} onChange={e=>setHandoverReceiverId(e.target.value)}><option value="">اختار المستلم</option>{teamUsers.filter(user=>user.is_active===1&&(user.role==='owner'||user.role==='depot_manager')).map(user=><option key={user.id} value={user.id}>{user.display_name} · {roleLabels[user.role]}</option>)}</select></label>
+            <label>المستلم فالديبو<select required value={handoverReceiverId} onChange={e=>setHandoverReceiverId(e.target.value)}><option value="">اختار المستلم</option>{teamUsers.filter(user=>user.is_active===1&&(user.role==='owner'||user.role==='depot_manager')).map(user=><option key={user.id} value={user.id}>{user.display_name} · {tr(roleLabels[user.role])}</option>)}</select></label>
             <label>المبلغ المسلم (DH)<input required type="number" min="0.01" step="0.01" value={handoverAmount} onChange={e=>setHandoverAmount(e.target.value)} /></label>
             <button className="primary-button" disabled={saving||cashSessions.every(session=>session.status!=='open')||teamUsers.every(user=>user.is_active!==1||(user.role!=='owner'&&user.role!=='depot_manager'))}>تأكيد تسليم النقدية وإصدار الوصل</button>
           </form>
           <div className="section-divider"></div><h4>جلسات التحصيل</h4>
           {cashSessions.length===0?<p className="hint">مازال ما تسجل حتى تحصيل نقدي من عمليات التوصيل.</p>:cashSessions.map(session=><article className="team-row" key={session.id}><div><strong>{session.user_name} · {session.vehicle_label||'بدون سيارة'}</strong><span>المفروض: {formatMad(session.expected_cash_minor)} · تسلم: {formatMad(session.handed_cash_minor)} · باقي: {formatMad(session.expected_cash_minor-session.handed_cash_minor)}</span><span>الحالة: {session.status==='open'?'مفتوحة':session.status==='submitted'?'تسلمات للديبو':'تمت المطابقة'}</span>{session.status==='reconciled'&&<span>النقد المعدود: {formatMad(Number(session.counted_cash_minor??0))} · الفرق: {formatSignedMad(Number(session.counted_cash_minor??0)-Number(session.expected_cash_minor))}{session.discrepancy_reason?' · السبب: '+session.discrepancy_reason:''}</span>}{session.status==='submitted'&&<div className="order-actions"><label>النقد المعدود فعلياً (DH)<input type="number" min="0" step="0.01" value={cashCountedAmounts[session.id]??''} onChange={e=>setCashCountedAmounts(current=>({...current,[session.id]:e.target.value}))}/></label><label>سبب الفرق إذا ما تطابقش<input value={cashDiscrepancyReasons[session.id]??''} onChange={e=>setCashDiscrepancyReasons(current=>({...current,[session.id]:e.target.value}))} placeholder="مثلاً: نقص نقدي أو خطأ فالعد"/></label><button type="button" className="secondary-button" disabled={saving} onClick={()=>reconcileCashSession(session)}>تأكيد المطابقة</button></div>}</div></article>)}
+        </section>
+
+        <section data-section="settings" className="panel team-panel settings-panel">
+          <div className="panel-heading"><div><h3>{tr('settingsTitle')}</h3><p>{tr('settingsSubtitle')}</p></div><span className="step-mark">SYS</span></div>
+          <div className="settings-group"><h4>{tr('settingsLanguageTitle')}</h4><p className="hint">{tr('settingsLanguageHint')}</p>
+            <label>{tr('language')}<select value={language} onChange={event=>setLanguage(event.target.value as AppLanguage)}><option value="ar">العربية</option><option value="fr">Français</option><option value="en">English</option></select></label>
+          </div>
+          <div className="section-divider"></div>
+          <div className="settings-group"><h4>{tr('settingsBusinessTitle')}</h4>
+            <div className="settings-info-grid">
+              <article><span>{tr('settingsCurrency')}</span><strong>MAD · DH</strong></article>
+              <article><span>{tr('settingsStorage')}</span><strong>{tr('settingsOffline')}</strong></article>
+              <article><span>{tr('settingsDatabase')}</span><strong>SQLite · SQLCipher</strong></article>
+              <article><span>{tr('settingsVersion')}</span><strong>2.0 · Android</strong></article>
+            </div><p className="hint">{tr('settingsBusinessHint')}</p>
+          </div>
+          <div className="section-divider"></div>
+          <div className="settings-group"><h4>{tr('settingsDataTitle')}</h4><p className="hint">{tr('settingsDataHint')}</p>
+            <button type="button" className="secondary-button" onClick={()=>setActiveSection('management')}>{tr('settingsOpenBackup')}</button>
+          </div>
+          <div className="section-divider"></div>
+          <div className="settings-group"><h4>{tr('settingsSecurityTitle')}</h4>
+            <ul className="settings-checklist"><li>{tr('settingsSecurityPin')}</li><li>{tr('settingsSecurityBackup')}</li><li>{tr('settingsSecurityOffline')}</li></ul>
+          </div>
         </section>
         <InvoiceArchivePanel onSelect={invoice=>setLastInvoice(invoice)}/>
         <DistributionOperationsPanel user={currentUser} users={teamUsers} vehicles={teamVehicles} customers={customers} products={products}/>

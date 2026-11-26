@@ -1,6 +1,17 @@
 import type { SqliteExecutor } from './sqlite-database';
 
 export type RouteStopStatus = 'pending'|'arrived'|'partially_delivered'|'delivered'|'failed'|'skipped';
+export type RouteStopOutcome = Exclude<RouteStopStatus, 'pending'|'arrived'>;
+type DeliveryProofResult = 'delivered'|'partial'|'refused'|'not_available'|'damaged';
+
+function toDeliveryProofResult(status:RouteStopOutcome):DeliveryProofResult {
+  switch(status){
+    case 'delivered': return 'delivered';
+    case 'partially_delivered': return 'partial';
+    case 'failed':
+    case 'skipped': return 'not_available';
+  }
+}
 export interface RouteStopInput { id:string; customerId:string; orderId?:string|null; stopOrder:number; plannedAt?:string|null; }
 export interface CreateRouteInput {
   id:string; code:string; name:string; plannedDate:string; vehicleId:string; driverUserId:string;
@@ -82,7 +93,7 @@ export class DistributionRepository {
     }catch(error){await this.db.rollbackTransaction().catch(()=>undefined);throw error;}
   }
 
-  async recordStop(input:{id:string;stopId:string;driverId:string;status:RouteStopStatus;recipientName?:string;signatureUri?:string;photoUri?:string;latitude?:number|null;longitude?:number|null;note?:string;failureReason?:string}):Promise<void>{
+  async recordStop(input:{id:string;stopId:string;driverId:string;status:RouteStopOutcome;recipientName?:string;signatureUri?:string;photoUri?:string;latitude?:number|null;longitude?:number|null;note?:string;failureReason?:string}):Promise<void>{
     const now=this.now();if(input.latitude!=null&&(!Number.isFinite(input.latitude)||input.latitude < -90||input.latitude>90))throw new RangeError('خط العرض غير صالح.');
     if(input.longitude!=null&&(!Number.isFinite(input.longitude)||input.longitude < -180||input.longitude>180))throw new RangeError('خط الطول غير صالح.');
     if(['delivered','partially_delivered'].includes(input.status)&&!input.recipientName?.trim()&&!input.signatureUri?.trim())throw new Error('التسليم خاصو اسم المستلم أو توقيع.');
@@ -93,7 +104,20 @@ export class DistributionRepository {
       const stop=found.values?.[0];
       if(!stop||String(stop.driver_user_id)!==input.driverId||String(stop.route_status)!=='started')throw new Error('المحطة ماشي ضمن جولة نشيطة ديالك.');
       if(!['pending','arrived'].includes(String(stop.status)))throw new Error('المحطة تسجلات من قبل؛ ما يمكنش نعاودو نسجلوها.');
-      await this.db.run('INSERT INTO delivery_proofs (id,route_stop_id,order_id,driver_user_id,result,recipient_name,signature_local_uri,photo_local_uri,latitude,longitude,note,captured_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',[input.id,input.stopId,stop.order_id??null,input.driverId,input.status,input.recipientName?.trim()||null,input.signatureUri??null,input.photoUri??null,input.latitude??null,input.longitude??null,input.note?.trim()||null,now,now]);
+      const proofResult=toDeliveryProofResult(input.status);
+      let invoiceId:string|null=null;
+      if(stop.order_id&&['delivered','partially_delivered'].includes(input.status)){
+        const linkedInvoice=await this.db.query(`SELECT i.id,o.status AS order_status,COUNT(sm.id) AS stock_movement_count
+          FROM invoices i JOIN sales_orders o ON o.id=i.order_id LEFT JOIN stock_movements sm ON sm.reference_type='invoice' AND sm.reference_id=i.id
+          WHERE i.order_id=? AND i.status<>'voided'
+          GROUP BY i.id ORDER BY i.created_at DESC LIMIT 1`,[stop.order_id]);
+        const invoice=linkedInvoice.values?.[0];
+        if(!invoice||Number(invoice.stock_movement_count??0)<1)throw new Error('خاصك تصدر فاتورة التسليم وتخصم مخزون السيارة قبل حفظ إثبات التسليم؛ ما لقيناش فاتورة مرتبطة بحركة المخزون.');
+        if(input.status==='delivered'&&String(invoice.order_status)!=='delivered')throw new Error('الطلب مازال ما تسلمش كامل؛ سجل التسليم الجزئي أو كمّل إصدار فواتير الكميات المتبقية.');
+        if(input.status==='partially_delivered'&&String(invoice.order_status)!=='partially_delivered')throw new Error('حالة الطلب ما كتوافقش التسليم الجزئي؛ حدّث الطلب قبل تسجيل الإثبات.');
+        invoiceId=String(invoice.id);
+      }
+      await this.db.run('INSERT INTO delivery_proofs (id,route_stop_id,order_id,invoice_id,driver_user_id,result,recipient_name,signature_local_uri,photo_local_uri,latitude,longitude,note,captured_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[input.id,input.stopId,stop.order_id??null,invoiceId,input.driverId,proofResult,input.recipientName?.trim()||null,input.signatureUri??null,input.photoUri??null,input.latitude??null,input.longitude??null,input.note?.trim()||null,now,now]);
       await this.db.run('UPDATE delivery_route_stops SET status=?,completed_at=?,failure_reason=?,notes=? WHERE id=?',[input.status,now,input.failureReason?.trim()||null,input.note?.trim()||null,input.stopId]);
       await this.db.run('INSERT INTO audit_events (id,actor_user_id,action,entity_type,entity_id,after_json,occurred_at) VALUES (?,?,?,?,?,?,?)',[this.makeId(),input.driverId,'route.stop_recorded','delivery_route_stop',input.stopId,JSON.stringify({status:input.status,proofId:input.id}),now]);
       await this.db.commitTransaction();
