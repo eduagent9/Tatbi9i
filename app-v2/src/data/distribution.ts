@@ -107,12 +107,14 @@ export class DistributionRepository {
       const proofResult=toDeliveryProofResult(input.status);
       let invoiceId:string|null=null;
       if(stop.order_id&&['delivered','partially_delivered'].includes(input.status)){
-        const linkedInvoice=await this.db.query(`SELECT i.id,COUNT(sm.id) AS stock_movement_count
-          FROM invoices i LEFT JOIN stock_movements sm ON sm.reference_type='invoice' AND sm.reference_id=i.id
+        const linkedInvoice=await this.db.query(`SELECT i.id,o.status AS order_status,COUNT(sm.id) AS stock_movement_count
+          FROM invoices i JOIN sales_orders o ON o.id=i.order_id LEFT JOIN stock_movements sm ON sm.reference_type='invoice' AND sm.reference_id=i.id
           WHERE i.order_id=? AND i.status<>'voided'
           GROUP BY i.id ORDER BY i.created_at DESC LIMIT 1`,[stop.order_id]);
         const invoice=linkedInvoice.values?.[0];
         if(!invoice||Number(invoice.stock_movement_count??0)<1)throw new Error('خاصك تصدر فاتورة التسليم وتخصم مخزون السيارة قبل حفظ إثبات التسليم؛ ما لقيناش فاتورة مرتبطة بحركة المخزون.');
+        if(input.status==='delivered'&&String(invoice.order_status)!=='delivered')throw new Error('الطلب مازال ما تسلمش كامل؛ سجل التسليم الجزئي أو كمّل إصدار فواتير الكميات المتبقية.');
+        if(input.status==='partially_delivered'&&String(invoice.order_status)!=='partially_delivered')throw new Error('حالة الطلب ما كتوافقش التسليم الجزئي؛ حدّث الطلب قبل تسجيل الإثبات.');
         invoiceId=String(invoice.id);
       }
       await this.db.run('INSERT INTO delivery_proofs (id,route_stop_id,order_id,invoice_id,driver_user_id,result,recipient_name,signature_local_uri,photo_local_uri,latitude,longitude,note,captured_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[input.id,input.stopId,stop.order_id??null,invoiceId,input.driverId,proofResult,input.recipientName?.trim()||null,input.signatureUri??null,input.photoUri??null,input.latitude??null,input.longitude??null,input.note?.trim()||null,now,now]);
