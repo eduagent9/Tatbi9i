@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { formatMad, formatSignedMad, madToMinorUnits } from './data/money';
 import { hashPin, isValidPin, verifyPin } from './data/auth';
 import { canPerform, type AppPermission } from './data/permissions';
+import { getWorkspaceNavigation } from './data/workspace-navigation';
 import { canLoadDistributionOrder, canTransitionDistributionOrder } from './data/distribution-workflow';
 import { openAppDatabase } from './data/sqlite-database';
 import { ProductRepository, type ProductRecord } from './data/products';
@@ -103,6 +104,7 @@ export default function App() {
   const [language,setLanguage]=useState<AppLanguage>(()=>{const saved=localStorage.getItem('tatbiqi.language');return saved==='fr'||saved==='en'?saved:'ar';});
   useEffect(()=>{localStorage.setItem('tatbiqi.language',language);document.documentElement.lang=language;document.documentElement.dir=language==='ar'?'rtl':'ltr';},[language]);
   const tr=(key:Parameters<typeof translate>[1])=>translate(language,key);
+  const workspaceNavigation=currentUser?getWorkspaceNavigation(currentUser.role,tr):[];
   const browserPreview=Capacitor.getPlatform()==='web'&&new URLSearchParams(window.location.search).get('preview')==='1';
 
   const refresh = useCallback(async (repo: ProductRepository) => setProducts(await repo.list()), []);
@@ -844,8 +846,8 @@ export default function App() {
           </form>
         </section>
       </div>}
-      {currentUser&&repository&&currentUser.role!=='owner'&&currentUser.role!=='order_rep'&&<nav className="main-section-nav role-section-nav" aria-label={tr('workspaceNavigation')}>
-        {(currentUser.role==='depot_manager'?[{id:'role-depot-orders',label:tr('navOrders'),icon:'▣'},{id:'role-depot-sales',label:tr('navSales'),icon:'＋'},{id:'role-depot-debts',label:tr('navDebts'),icon:'◷'},{id:'role-depot-stock',label:tr('navStock'),icon:'▤'},{id:'role-depot-cash',label:tr('navCash'),icon:'⇄'}]:currentUser.role==='van_sales'?[{id:'role-van-sales',label:tr('navSales'),icon:'＋'},{id:'role-van-cash',label:tr('navCash'),icon:'⇄'}]:[{id:'role-driver-delivery',label:tr('navDelivery'),icon:'⇢'},{id:'role-driver-cash',label:tr('navCash'),icon:'⇄'}]).map(item=><button type="button" key={item.id} aria-label={item.label} onClick={()=>document.getElementById(item.id)?.scrollIntoView({behavior:'smooth',block:'start'})}><span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-label">{item.label}</span></button>)}
+      {currentUser&&repository&&workspaceNavigation.length>0&&<nav className="main-section-nav role-section-nav" aria-label={tr('workspaceNavigation')}>
+        {workspaceNavigation.map(item=><button type="button" key={item.id} aria-label={item.label} onClick={()=>document.getElementById(item.id)?.scrollIntoView({behavior:'smooth',block:'start'})}><span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-label">{item.label}</span></button>)}
       </nav>}
       {currentUser?.role==='owner'&&repository&&<nav className="main-section-nav" aria-label="الأقسام الرئيسية">{([{id:'home',label:tr('home'),icon:'⌂'},{id:'sales',label:tr('sales'),icon:'▣'},{id:'inventory',label:tr('inventory'),icon:'▤'},{id:'distribution',label:tr('distribution'),icon:'⇢'},{id:'purchases',label:tr('purchases'),icon:'⇩'},{id:'relations',label:tr('relations'),icon:'♧'},{id:'management',label:tr('management'),icon:'⚙'}] as const).map(item=><button type="button" key={item.id} className={activeSection===item.id?'active':''} aria-label={item.label} aria-current={activeSection===item.id?'page':undefined} onClick={()=>setActiveSection(item.id)}><span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-label">{item.label}</span></button>)}</nav>}
       {currentUser?.role==='owner'&&repository && <div className="content-grid section-view" data-active-section={activeSection}>
