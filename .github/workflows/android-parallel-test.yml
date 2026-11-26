@@ -1,0 +1,63 @@
+name: Build Tatbiqi Parallel Test APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-parallel-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app-v2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --legacy-peer-deps
+      - name: Run tests
+        run: npm test
+      - name: Type-check and build web app
+        run: npm run build
+      - name: Configure isolated test identity
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const path = 'capacitor.config.ts';
+          let config = fs.readFileSync(path, 'utf8');
+          const expected = "appId: 'com.eduagent.tatbiqi'";
+          if (!config.includes(expected)) {
+            throw new Error('Expected production appId was not found; refusing to build with an unknown package identity.');
+          }
+          config = config.replace(expected, "appId: 'com.eduagent.tatbiqi.test'");
+          config = config.replace("appName: 'تطبيقي'", "appName: 'تطبيقي - اختبار'");
+          fs.writeFileSync(path, config);
+          console.log('Using isolated package com.eduagent.tatbiqi.test; repository config remains unchanged.');
+          NODE
+      - name: Generate Android project
+        run: npx cap add android
+      - name: Sync Capacitor plugins and assets
+        run: npx cap sync android
+      - name: Build parallel-install debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+      - name: Upload parallel test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tatbiqi-parallel-test-apk
+          path: app-v2/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
