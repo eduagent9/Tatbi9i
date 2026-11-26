@@ -33,12 +33,6 @@ interface NativeSqliteConnection {
   rollbackTransaction(): Promise<unknown>;
 }
 
-/**
- * The plugin wraps execute() and run() in their own transactions by default.
- * Our repositories and migration runner explicitly own multi-statement
- * transactions, so nested plugin transactions must be disabled for individual
- * statements. SQLite still commits standalone statements in autocommit mode.
- */
 export function createSqliteExecutor(connection: NativeSqliteConnection): SqliteExecutor {
   return {
     execute: statement => connection.execute(statement, false),
@@ -121,12 +115,44 @@ export async function applyMigrations(
   return currentVersion;
 }
 
+function createRandomDatabaseSecret(): string {
+  if (!globalThis.crypto?.getRandomValues) {
+    throw new Error('تعذر إنشاء مفتاح تشفير آمن على هذا الجهاز؛ لم يتم فتح قاعدة البيانات.');
+  }
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(32));
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
 class CapacitorSqliteFactory implements SqliteConnectionFactory {
   private readonly sqlite = new SQLiteConnection(CapacitorSQLite);
 
   async open(name: string): Promise<SqliteExecutor> {
-    const connection = await this.sqlite.createConnection(name, false, 'no-encryption', 1, false);
+    if (Capacitor.getPlatform() === 'web') {
+      throw new Error('قاعدة البيانات متاحة حالياً داخل تطبيق Android فقط؛ معاينة المتصفح لا تحفظ البيانات.');
+    }
+
+    // The plugin persists this random secret using its native secure secret store.
+    // Never replace it on an existing installation: doing so would make the database unreadable.
+    const secretStored = (await this.sqlite.isSecretStored()).result;
+    if (!secretStored) {
+      await this.sqlite.setEncryptionSecret(createRandomDatabaseSecret());
+    }
+
+    const exists = (await this.sqlite.isDatabase(name)).result;
+    let mode: 'secret' | 'encryption' = 'secret';
+    if (exists) {
+      const encrypted = (await this.sqlite.isDatabaseEncrypted(name)).result;
+      // One-time SQLCipher conversion for databases created by older unencrypted builds.
+      mode = encrypted ? 'secret' : 'encryption';
+    }
+
+    const connection = await this.sqlite.createConnection(name, true, mode, 1, false);
     await connection.open();
+    const encrypted = (await this.sqlite.isDatabaseEncrypted(name)).result;
+    if (!encrypted) {
+      await this.sqlite.closeConnection(name, false).catch(() => undefined);
+      throw new Error('تعذر تأكيد تشفير قاعدة البيانات؛ توقف فتح التطبيق لحماية بياناتك.');
+    }
     return createSqliteExecutor(connection as unknown as NativeSqliteConnection);
   }
 
@@ -159,8 +185,6 @@ export async function openAppDatabase(
       if (db) await factory.close(APP_DATABASE_NAME).catch(() => undefined);
       throw error;
     } finally {
-      // Clear the single-flight promise even when the native connection itself
-      // fails to open, so a later user retry can attempt a fresh connection.
       opening = null;
     }
   })();
