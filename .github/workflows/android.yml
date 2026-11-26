@@ -96,6 +96,11 @@ jobs:
               cat /tmp/tatbiqi-window.xml
               exit 1
             fi
+            if ! grep -Eq "إعداد دخول المالك|تسجيل الدخول" /tmp/tatbiqi-window.xml; then
+              echo "The app did not reach its first-run authentication screen."
+              cat /tmp/tatbiqi-window.xml
+              exit 1
+            fi
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
